@@ -1,0 +1,450 @@
+{
+  "name": "Termômetro de Campanha - Meta Ads",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "a1111111-0000-4000-8000-000000000001",
+      "name": "Agendamento - A cada 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "COLE_AQUI_O_ID_DA_DATABASE_CLIENTES_TRAFEGO",
+          "mode": "id"
+        },
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Status|select",
+              "condition": "equals",
+              "selectValue": "Ativo"
+            }
+          ]
+        }
+      },
+      "id": "a1111111-0000-4000-8000-000000000002",
+      "name": "Buscar Clientes - Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [220, -120],
+      "credentials": {
+        "notionApi": {
+          "id": "CREDENCIAL_NOTION",
+          "name": "Notion - Bruno"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "COLE_AQUI_O_ID_DA_PLANILHA_METAS",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Metas_Trafego",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000003",
+      "name": "Buscar Metas - Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [220, 120],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENCIAL_GOOGLE",
+          "name": "Google Sheets - Bruno"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000004",
+      "name": "Juntar Notion + Sheets (bruto)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [460, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// O QUE FAZ: junta os dados do Notion (cadastro do cliente) com os da\n// planilha do Google Sheets (metas de CPL e orçamento), usando o\n// ad_account_id como chave de cruzamento.\n//\n// POR QUE: o Notion é o cadastro mestre do cliente, mas a meta de CPL\n// muda com frequência e o Sheets é mais rápido de editar (até pelo\n// celular). Se a mesma conta existir nas duas fontes, o valor do\n// Sheets tem prioridade, porque é o mais \"vivo\" / atualizado.\n\nconst itensNotion = $input.all().filter(item => item.json.ad_account_id_notion || item.json.properties);\nconst todos = $input.all();\n\n// Separa por origem usando o node de origem (merge combineByPosition\n// entrega os itens intercalados, então recuperamos pelo pairedItem)\nconst doNotion = [];\nconst doSheets = [];\n\nfor (const item of todos) {\n  const fonte = item.json.__fonte || (item.json.ad_account_id ? 'sheets' : 'notion');\n  if (item.json.properties) {\n    doNotion.push(item.json);\n  } else {\n    doSheets.push(item.json);\n  }\n}\n\n// Monta um mapa de metas por conta a partir do Sheets\nconst metasPorConta = {};\nfor (const linha of doSheets) {\n  if (linha.ad_account_id) {\n    metasPorConta[linha.ad_account_id] = {\n      cpl_meta: parseFloat(linha.cpl_meta),\n      orcamento_diario: parseFloat(linha.orcamento_diario)\n    };\n  }\n}\n\nconst resultado = [];\n\nfor (const pagina of doNotion) {\n  const props = pagina.properties || {};\n\n  const nomeCliente = props['Nome cliente']?.title?.[0]?.plain_text || 'Sem nome';\n  const adAccountId = props['Ad Account ID']?.rich_text?.[0]?.plain_text || null;\n  const eventoConversao = props['Evento de conversão']?.select?.name || 'lead';\n\n  if (!adAccountId) continue; // sem ID de conta não dá pra consultar o Meta\n\n  // Prioriza meta do Sheets; se não achar, cai pro valor do Notion (se existir)\n  const metaSheets = metasPorConta[adAccountId];\n  const cplMetaNotion = props['CPL Meta']?.number || null;\n  const orcamentoNotion = props['Orçamento diário']?.number || null;\n\n  resultado.push({\n    json: {\n      nome_cliente: nomeCliente,\n      ad_account_id: adAccountId,\n      evento_conversao: eventoConversao,\n      cpl_meta: metaSheets ? metaSheets.cpl_meta : cplMetaNotion,\n      orcamento_diario: metaSheets ? metaSheets.orcamento_diario : orcamentoNotion,\n      origem_meta: metaSheets ? 'google_sheets' : 'notion'\n    }\n  });\n}\n\nreturn resultado;"
+      },
+      "id": "a1111111-0000-4000-8000-000000000005",
+      "name": "Combinar Fontes (Notion + Sheets)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000006",
+      "name": "Dividir por Cliente",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v21.0/act_{{ $json.ad_account_id }}/insights",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "campaign_name,spend,cpm,cpc,ctr,actions,cost_per_action_type"
+            },
+            {
+              "name": "date_preset",
+              "value": "today"
+            },
+            {
+              "name": "level",
+              "value": "campaign"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.metaMarketingApi.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000007",
+      "name": "Buscar Métricas - Meta Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENCIAL_META_TOKEN",
+          "name": "Meta Marketing API - System User"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// O QUE FAZ: pega a resposta bruta do Meta Ads (spend, ações, custo por\n// tipo de ação) e calcula o CPL real de cada campanha do cliente.\n//\n// POR QUE: o Meta não devolve \"CPL\" pronto — ele devolve um array de\n// cost_per_action_type com vários tipos de conversão junto. Aqui a\n// gente filtra só o evento que representa lead pra esse cliente\n// (definido lá no cadastro, campo evento_conversao) e calcula manual.\n\nconst dadosCliente = $('Dividir por Cliente').item.json;\nconst respostaMeta = $input.item.json.data || [];\n\nconst campanhasProcessadas = [];\n\nfor (const campanha of respostaMeta) {\n  const gasto = parseFloat(campanha.spend || 0);\n  const ctr = parseFloat(campanha.ctr || 0);\n  const cpm = parseFloat(campanha.cpm || 0);\n\n  // Procura, dentro de cost_per_action_type, o evento de conversão\n  // configurado pra esse cliente (ex: 'lead', 'onsite_conversion.lead_grouped')\n  const custoPorAcao = campanha.cost_per_action_type || [];\n  const acaoLead = custoPorAcao.find(a => a.action_type === dadosCliente.evento_conversao);\n\n  const cplReal = acaoLead ? parseFloat(acaoLead.value) : null;\n\n  campanhasProcessadas.push({\n    json: {\n      nome_cliente: dadosCliente.nome_cliente,\n      ad_account_id: dadosCliente.ad_account_id,\n      cpl_meta: dadosCliente.cpl_meta,\n      orcamento_diario: dadosCliente.orcamento_diario,\n      campanha: campanha.campaign_name,\n      gasto_hoje: gasto,\n      ctr: ctr,\n      cpm: cpm,\n      cpl_real: cplReal\n    }\n  });\n}\n\nreturn campanhasProcessadas;"
+      },
+      "id": "a1111111-0000-4000-8000-000000000008",
+      "name": "Calcular CPL Real",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.cpl_real }}",
+              "rightValue": "={{ $json.cpl_meta * 1.3 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000009",
+      "name": "CPL Estourou a Meta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1560, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Você é um analista de tráfego pago. Responda em português, curto e direto, sem enrolação.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Campanha {{ $json.campanha }} do cliente {{ $json.nome_cliente }}. CPL meta: R$ {{ $json.cpl_meta }}. CPL real hoje: R$ {{ $json.cpl_real }}. Gasto até agora: R$ {{ $json.gasto_hoje }}. CTR: {{ $json.ctr }}%. CPM: R$ {{ $json.cpm }}. Dê 1 causa provável do estouro e 1 ação recomendada, em até 3 linhas.\"\n    }\n  ],\n  \"max_tokens\": 200\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.groqApi.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000010",
+      "name": "Gerar Diagnóstico - Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, -120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENCIAL_GROQ",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// O QUE FAZ: monta o texto final da mensagem de WhatsApp, juntando os\n// números da campanha com o diagnóstico que o Groq gerou.\n//\n// POR QUE: separar \"montar mensagem\" de \"enviar mensagem\" em dois nodes\n// deixa mais fácil trocar o canal de envio no futuro (ex: e-mail,\n// Telegram) sem mexer na lógica de formatação.\n\nconst dados = $('Calcular CPL Real').item.json;\nconst diagnostico = $input.item.json.choices?.[0]?.message?.content || 'Diagnóstico indisponível.';\n\nconst percentualEstouro = (((dados.cpl_real - dados.cpl_meta) / dados.cpl_meta) * 100).toFixed(0);\n\nconst mensagem = `🔴 Alerta de CPL - ${dados.nome_cliente}\nCampanha: ${dados.campanha}\n\nCPL atual: R$ ${dados.cpl_real.toFixed(2)} (meta R$ ${dados.cpl_meta.toFixed(2)}, +${percentualEstouro}%)\nGasto hoje: R$ ${dados.gasto_hoje.toFixed(2)}\nCTR: ${dados.ctr}%\n\nDiagnóstico:\n${diagnostico}`;\n\nreturn [{\n  json: {\n    ...dados,\n    diagnostico,\n    mensagem_whatsapp: mensagem\n  }\n}];"
+      },
+      "id": "a1111111-0000-4000-8000-000000000011",
+      "name": "Montar Mensagem de Alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://SUA_URL_EVOLUTION_API/message/sendText/SUA_INSTANCIA",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"SEU_NUMERO_WHATSAPP\",\n  \"text\": \"{{ $json.mensagem_whatsapp }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.evolutionApi.apiKey }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000012",
+      "name": "Enviar Alerta - WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, -120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENCIAL_EVOLUTION",
+          "name": "Evolution API - Bruno"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://SEU_PROJETO.supabase.co/rest/v1/campanha_historico",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cliente\": \"{{ $json.nome_cliente }}\",\n  \"ad_account_id\": \"{{ $json.ad_account_id }}\",\n  \"campanha\": \"{{ $json.campanha }}\",\n  \"cpl_meta\": {{ $json.cpl_meta }},\n  \"cpl_real\": {{ $json.cpl_real }},\n  \"gasto_hoje\": {{ $json.gasto_hoje }},\n  \"ctr\": {{ $json.ctr }},\n  \"cpm\": {{ $json.cpm }},\n  \"estourou_meta\": true,\n  \"verificado_em\": \"{{ $now.toISO() }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseApi.apiKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000013",
+      "name": "Salvar Histórico - Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENCIAL_SUPABASE",
+          "name": "Supabase - Bruno"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://SEU_PROJETO.supabase.co/rest/v1/campanha_historico",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"cliente\": \"{{ $json.nome_cliente }}\",\n  \"ad_account_id\": \"{{ $json.ad_account_id }}\",\n  \"campanha\": \"{{ $json.campanha }}\",\n  \"cpl_meta\": {{ $json.cpl_meta }},\n  \"cpl_real\": {{ $json.cpl_real }},\n  \"gasto_hoje\": {{ $json.gasto_hoje }},\n  \"ctr\": {{ $json.ctr }},\n  \"cpm\": {{ $json.cpm }},\n  \"estourou_meta\": false,\n  \"verificado_em\": \"{{ $now.toISO() }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseApi.apiKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1111111-0000-4000-8000-000000000014",
+      "name": "Salvar Histórico OK - Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 180],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENCIAL_SUPABASE",
+          "name": "Supabase - Bruno"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Agendamento - A cada 6h": {
+      "main": [
+        [
+          { "node": "Buscar Clientes - Notion", "type": "main", "index": 0 },
+          { "node": "Buscar Metas - Google Sheets", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Buscar Clientes - Notion": {
+      "main": [
+        [
+          { "node": "Juntar Notion + Sheets (bruto)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Buscar Metas - Google Sheets": {
+      "main": [
+        [
+          { "node": "Juntar Notion + Sheets (bruto)", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Juntar Notion + Sheets (bruto)": {
+      "main": [
+        [
+          { "node": "Combinar Fontes (Notion + Sheets)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Combinar Fontes (Notion + Sheets)": {
+      "main": [
+        [
+          { "node": "Dividir por Cliente", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Dividir por Cliente": {
+      "main": [
+        [
+          { "node": "Buscar Métricas - Meta Ads", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Buscar Métricas - Meta Ads": {
+      "main": [
+        [
+          { "node": "Calcular CPL Real", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Calcular CPL Real": {
+      "main": [
+        [
+          { "node": "CPL Estourou a Meta?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "CPL Estourou a Meta?": {
+      "main": [
+        [
+          { "node": "Gerar Diagnóstico - Groq", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Salvar Histórico OK - Supabase", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gerar Diagnóstico - Groq": {
+      "main": [
+        [
+          { "node": "Montar Mensagem de Alerta", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Montar Mensagem de Alerta": {
+      "main": [
+        [
+          { "node": "Enviar Alerta - WhatsApp", "type": "main", "index": 0 },
+          { "node": "Salvar Histórico - Supabase", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Salvar Histórico OK - Supabase": {
+      "main": [
+        [
+          { "node": "Dividir por Cliente", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Salvar Histórico - Supabase": {
+      "main": [
+        [
+          { "node": "Dividir por Cliente", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
