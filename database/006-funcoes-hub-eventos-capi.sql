@@ -1,0 +1,2 @@
+-- MÓDULO 05/06 — funções auxiliares do HUB e fila CAPI
+-- Conteúdo completo versionado na próxima atualização deste arquivo.
