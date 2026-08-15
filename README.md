@@ -1,83 +1,128 @@
-# Meta Ads Growth
+# DescompliADS
 
-Sistema de automação para coleta, análise, monitoramento e otimização de campanhas Meta Ads usando n8n, Meta Marketing API, inteligência artificial e dados do funil comercial.
+Painel de inteligência para gestores de tráfego, focado inicialmente em campanhas do Meta Ads.
 
-O objetivo do projeto é evoluir os fluxos atuais de relatórios e alertas para um sistema de gestão de performance capaz de identificar desperdícios, encontrar oportunidades de escala, detectar fadiga de anúncios, medir qualidade dos leads e apoiar decisões de orçamento e criativos.
+O DescompliADS transforma métricas em **diagnóstico, prioridades, recomendações e histórico de melhorias**. O produto não pretende substituir o Gerenciador de Anúncios, nem funcionar como CRM ou sistema de atendimento.
 
-> Estado atual: fase de documentação e consolidação da base existente.
+> Princípio do produto: **observar, analisar, recomendar e acompanhar**.
 
----
+## Repositório
 
-## Objetivo do produto
+Repositório técnico atual:
 
-O Meta Ads Growth deve responder continuamente a cinco perguntas:
+**https://github.com/Bonisengna/meta-ads-growth**
 
-1. Onde a verba está sendo desperdiçada?
-2. Quais campanhas, conjuntos e anúncios merecem mais investimento?
-3. Quais criativos, ofertas e públicos estão perdendo desempenho?
-4. Quais anúncios geram leads realmente qualificados, e não apenas conversas baratas?
-5. Qual é a próxima ação recomendada para melhorar o resultado da conta?
-
-O produto final não deverá apenas gerar relatórios. Ele deverá transformar dados em decisões práticas e rastreáveis.
+O nome do repositório ainda reflete a origem do projeto. O produto passa a ser documentado como **DescompliADS**.
 
 ---
 
-## Princípio principal
+## O problema que o produto resolve
 
-Uma conversa barata não significa necessariamente um lead bom.
+Um dashboard tradicional responde:
 
-A evolução do sistema seguirá este funil:
+> O que aconteceu?
+
+O DescompliADS deve avançar para:
+
+- o que aconteceu;
+- por que provavelmente aconteceu;
+- onde está o problema;
+- o que deve ser feito;
+- se a melhoria aplicada funcionou.
+
+A proposta é transformar acompanhamento de mídia em um processo contínuo:
 
 ```text
-Impressão
+MÉTRICAS
    ↓
-Clique
+DIAGNÓSTICO
    ↓
-Conversa
+RECOMENDAÇÃO
    ↓
-Lead identificado
+MELHORIA
    ↓
-Lead qualificado
+VALIDAÇÃO
    ↓
-Agendamento
-   ↓
-Proposta
-   ↓
-Venda
+APRENDIZADO
 ```
-
-O sistema deverá evoluir de métricas como **CPC** e **custo por conversa** para métricas de negócio como:
-
-- custo por lead qualificado;
-- custo por agendamento;
-- custo por proposta;
-- custo por venda;
-- taxa de conversa para qualificação;
-- taxa de qualificação para agendamento;
-- taxa de agendamento para venda.
 
 ---
 
-# Workflows existentes
+## Público inicial
 
-A branch `main` representa a fotografia inicial do projeto antes da refatoração.
+O MVP é voltado para:
 
-## 1. RELATORIOS CAMPANHAS META
+- gestores de tráfego;
+- operação própria;
+- gestores com vários clientes;
+- acompanhamento de contas Meta Ads.
 
-Arquivo:
+A arquitetura poderá evoluir posteriormente para múltiplos usuários, equipes e organizações.
+
+---
+
+## O que o DescompliADS fará
+
+O MVP deverá permitir:
+
+- acompanhar métricas de campanhas;
+- comparar períodos;
+- acompanhar campanhas, conjuntos e anúncios;
+- receber análises produzidas por IA;
+- identificar problemas e oportunidades;
+- registrar melhorias recomendadas;
+- acompanhar melhorias pendentes;
+- registrar quando uma melhoria foi aplicada;
+- comparar resultados antes e depois;
+- criar histórico de decisões e aprendizados por campanha;
+- facilitar a gestão de várias contas/clientes.
+
+---
+
+## O que NÃO entra no MVP
+
+Inicialmente não faz parte do escopo:
+
+- criação de campanhas;
+- edição de campanhas;
+- alteração de orçamento;
+- upload de criativos;
+- criação de públicos;
+- edição de anúncios;
+- substituição do Gerenciador de Anúncios;
+- CRM;
+- atendimento de leads;
+- WhatsApp;
+- gestão de conversas.
+
+O DescompliADS será um sistema de **acompanhamento e inteligência**, não uma ferramenta de operação direta no Meta Ads.
+
+---
+
+## Arquitetura alvo
 
 ```text
-RELATORIOS CAMPANHAS META.json
+META GRAPH API
+      ↓
+     n8n
+      ↓
+   SUPABASE
+      ↓
+FASTAPI / PYTHON
+      ↓
+   NEXT.JS
+      ↓
+ DESCOMPLIADS
 ```
 
-Responsável por consultar a Meta Marketing API nos níveis:
+### Meta Graph API
 
-- campanha;
-- conjunto de anúncios;
-- anúncio.
+Fonte das informações de mídia, como:
 
-Coleta atualmente métricas como:
-
+- contas;
+- campanhas;
+- conjuntos de anúncios;
+- anúncios;
 - investimento;
 - impressões;
 - alcance;
@@ -85,738 +130,545 @@ Coleta atualmente métricas como:
 - CTR;
 - CPC;
 - CPM;
-- cliques no link;
-- conversas iniciadas;
-- primeiras respostas;
-- conexões de mensagem;
-- visualizações de vídeo;
+- conversões;
+- leads;
+- conversas;
+- demais métricas disponíveis.
+
+### n8n
+
+Continua sendo o motor de automação.
+
+Responsabilidades planejadas:
+
+- buscar dados da Meta Graph API;
+- executar coletas periódicas;
+- normalizar respostas;
+- gravar dados;
+- preparar contexto para IA;
+- executar análises;
+- gravar diagnósticos;
+- gerar alertas;
+- disparar processos automáticos.
+
+O n8n não deve se tornar o backend principal do SaaS.
+
+### Supabase
+
+Camada prevista para:
+
+- PostgreSQL;
+- armazenamento de métricas;
+- histórico;
+- clientes;
+- contas Meta;
+- campanhas;
+- análises de IA;
+- recomendações;
+- melhorias;
+- alertas;
+- autenticação futura.
+
+### FastAPI
+
+Backend do produto em Python.
+
+Responsabilidades:
+
+- fornecer API REST;
+- centralizar regras de negócio;
+- calcular indicadores;
+- consolidar dados;
+- comparar períodos;
+- controlar acesso aos dados;
+- preparar respostas para o frontend;
+- futuramente executar análises estatísticas avançadas.
+
+### Next.js
+
+Frontend responsável por:
+
+- dashboard;
+- filtros;
+- gráficos;
+- navegação;
+- clientes;
+- campanhas;
+- análises;
+- melhorias;
+- alertas;
+- configurações.
+
+---
+
+## Estrutura técnica prevista
+
+```text
+DescompliADS/
+├── frontend/
+│   └── Next.js
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── api/
+│   │   │   ├── dashboard.py
+│   │   │   ├── clients.py
+│   │   │   ├── campaigns.py
+│   │   │   ├── analyses.py
+│   │   │   └── improvements.py
+│   │   ├── models/
+│   │   ├── services/
+│   │   ├── database/
+│   │   └── config/
+│   ├── tests/
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   └── .env.example
+├── n8n/
+│   └── fluxos e exportações
+├── docs/
+└── README.md
+```
+
+---
+
+## Modelo inicial de dados
+
+Tabelas previstas:
+
+```text
+clients
+meta_accounts
+campaigns
+adsets
+ads
+campaign_metrics
+adset_metrics
+ad_metrics
+ai_analyses
+recommendations
+improvements
+alerts
+```
+
+Possíveis tabelas futuras:
+
+```text
+creatives
+benchmarks
+reports
+users
+organizations
+```
+
+---
+
+## Hierarquia Meta Ads
+
+O produto deve respeitar os três níveis:
+
+```text
+CAMPANHA
+   ↓
+CONJUNTO
+   ↓
+ANÚNCIO
+```
+
+A análise deve conseguir localizar em qual nível ocorreu a deterioração.
+
+Exemplo:
+
+```text
+Campanha     → saudável
+Conjunto     → saudável
+Anúncio      → problema identificado
+```
+
+Em vez de apenas dizer que uma campanha piorou, o objetivo é chegar a diagnósticos como:
+
+> O aumento do CPL está concentrado no anúncio CRIATIVO_03. Os demais anúncios mantiveram desempenho semelhante.
+
+---
+
+## Dashboard principal
+
+Indicadores previstos para a visão geral:
+
+- investimento;
+- leads;
+- CPL;
+- CTR;
+- CPC;
+- conversas;
 - custo por conversa.
 
-Os dados são normalizados e enviados para Google Sheets.
+Também deverá destacar rapidamente campanhas que precisam de atenção.
 
-### Papel futuro
-
-Este workflow será transformado no **coletor diário de dados Meta Ads**.
-
-Ele deverá coletar dados em granularidade diária e armazená-los sem duplicidade.
+Os gráficos só devem existir quando ajudarem a responder uma pergunta de negócio.
 
 ---
 
-## 2. ANALISTA DE ANUNCIOS
+## Comparação de períodos
 
-Arquivo:
-
-```text
-ANALISTA DE ANUNCIOS.json
-```
-
-Lê os dados de campanhas, conjuntos e anúncios armazenados no Google Sheets e prepara um relatório consolidado para análise por IA.
-
-Atualmente calcula e compara informações como:
-
-- investimento total;
-- custo médio por conversa;
-- CPC médio;
-- CTR médio;
-- CPM médio;
-- melhores campanhas;
-- piores campanhas;
-- melhores conjuntos;
-- piores conjuntos;
-- melhores anúncios;
-- piores anúncios;
-- anúncios com gasto e nenhuma conversa.
-
-A IA gera diagnóstico, recomendações de melhoria, sugestões de criativos, copy, CTA e novos testes.
-
-### Papel futuro
-
-A IA não deverá ser responsável pelos cálculos ou pelas regras principais de decisão.
-
-O código calculará os indicadores e classificará a performance. A IA será utilizada principalmente para:
-
-- interpretar resultados;
-- explicar causas prováveis;
-- gerar hipóteses;
-- sugerir novos criativos;
-- sugerir novas copies;
-- resumir decisões para o gestor.
-
----
-
-## 3. META ADS - ALERTAS
-
-Arquivo:
-
-```text
-META ADS - ALERTAS.json
-```
-
-Analisa campanhas, conjuntos e anúncios e gera alertas curtos para tomada de decisão.
-
-As ações atuais incluem recomendações como:
-
-- escalar;
-- manter;
-- observar;
-- ajustar copy;
-- ajustar criativo;
-- aumentar público;
-- refinar público;
-- reduzir orçamento;
-- pausar;
-- duplicar para teste;
-- trocar objetivo;
-- criar nova variação.
-
-### Papel futuro
-
-Será transformado em uma camada de alertas alimentada pelo **Motor de Decisão**.
-
-A IA explicará a decisão, mas os critérios de escala, pausa ou observação serão definidos matematicamente.
-
----
-
-## 4. ALERTA FUNDOS META
-
-Arquivo:
-
-```text
-ALERTA FUNDOS META.json
-```
-
-Consulta informações operacionais da conta de anúncios, incluindo:
-
-- status da conta;
-- limite;
-- valor gasto;
-- saldo disponível estimado;
-- valores em aberto.
-
-### Papel futuro
-
-Será mantido como monitor operacional da conta e poderá gerar alertas automáticos de risco financeiro ou interrupção das campanhas.
-
----
-
-## 5. TERMOMETRO_CAMPANHA
-
-Arquivo:
-
-```text
-TERMOMETRO_CAMPANHA.json
-```
-
-Protótipo de monitoramento periódico de campanhas.
-
-O fluxo contém conceitos que poderão ser reaproveitados na arquitetura futura, como:
-
-- execução periódica;
-- cadastro de clientes no Notion;
-- metas configuráveis pelo Google Sheets;
-- processamento cliente por cliente;
-- consulta de métricas da Meta;
-- comparação entre CPL real e CPL meta;
-- diagnóstico automatizado;
-- alertas.
-
-Este workflow será tratado como **protótipo experimental** até que seus conceitos sejam incorporados à arquitetura principal.
-
----
-
-# Problemas conhecidos da versão inicial
-
-Estes pontos devem ser corrigidos antes de automatizar decisões de orçamento.
-
-## 1. Períodos sobrepostos no histórico
-
-O coletor atual consulta uma janela móvel de aproximadamente 180 dias e depois adiciona os dados novamente ao Google Sheets.
-
-Isso pode gerar períodos repetidos e distorcer:
-
-- investimento total;
-- médias;
-- rankings;
-- custo por conversa;
-- decisões de escala ou pausa.
-
-### Solução planejada
-
-Coletar preferencialmente **um dia por execução** e utilizar uma chave única para impedir duplicidade.
+Funcionalidade obrigatória do MVP.
 
 Exemplo:
 
 ```text
-data + conta + nivel + id_objeto
+Últimos 7 dias
+      VS
+7 dias anteriores
 ```
 
-No nível de anúncio:
+A comparação poderá mostrar variações de:
+
+- investimento;
+- leads;
+- CPL;
+- CTR;
+- CPC.
+
+A IA deverá interpretar o resultado, mas não substituir os cálculos determinísticos.
+
+---
+
+## Análises da IA
+
+A IA é a camada de interpretação do produto.
+
+Uma análise deve conseguir registrar:
 
 ```text
-data + ad_id
+Campanha
+Problema
+Possíveis causas
+Recomendação
+Prioridade
 ```
+
+As análises não devem ser sobrescritas. Cada execução deve gerar histórico.
+
+Isso permitirá responder perguntas como:
+
+> A IA já tinha detectado esse problema?
 
 ---
 
-## 2. Mapeamento incorreto de CPC em conjuntos
+## Melhorias e experimentos
 
-Na versão inicial existe um ponto em que a coluna `CPC` do nível de conjunto recebe o valor de `LEADS`.
+As recomendações poderão ser transformadas em melhorias acompanháveis.
 
-### Correção
-
-Deverá utilizar:
+Status previstos:
 
 ```text
-$json.CPC
+Pendente
+Em teste
+Aplicada
+Validando
+Resolvida
+Descartada
 ```
 
-Essa correção será realizada na primeira etapa de refatoração.
-
----
-
-## 3. Lead e conversa representam atualmente o mesmo evento
-
-Na estrutura inicial, para campanhas de mensagens:
-
-```text
-LEADS = CONVERSAS INICIADAS
-```
-
-Consequentemente, CPL e custo por conversa podem representar essencialmente a mesma métrica.
-
-### Solução planejada
-
-Separar os eventos do funil comercial:
-
-```text
-conversa
-lead_identificado
-lead_qualificado
-agendamento
-proposta
-venda
-```
-
----
-
-## 4. Falta de análise de tendência
-
-Uma média histórica isolada pode esconder deterioração recente.
-
-O sistema deverá comparar janelas móveis como:
-
-```text
-3 dias
-7 dias
-14 dias
-30 dias
-```
-
-Exemplo de indicadores futuros:
-
-```text
-CTR 3d vs 7d
-CTR 7d vs 14d
-CPC 3d vs 7d
-Custo por conversa 3d vs 7d
-Custo por lead qualificado 7d vs 30d
-```
-
----
-
-# Arquitetura atual
-
-```mermaid
-graph TD
-    META[Meta Marketing API] --> N8N[n8n]
-    N8N --> SHEETS[Google Sheets]
-    SHEETS --> ANALISTA[Analista IA]
-    SHEETS --> ALERTAS[Alertas IA]
-    ANALISTA --> TELEGRAM[Telegram]
-    ALERTAS --> TELEGRAM
-```
-
----
-
-# Arquitetura alvo
-
-```mermaid
-graph TD
-    META[Meta Marketing API] --> COLETOR[Coletor Diário Meta Ads]
-    COLETOR --> BANCO[(Banco de Dados)]
-
-    BANCO --> PERFORMANCE[Motor de Performance]
-    BANCO --> TENDENCIA[Motor de Tendência]
-    BANCO --> FADIGA[Detector de Fadiga]
-
-    CRM[CRM / Atendimento] --> QUALIDADE[Qualidade dos Leads]
-    QUALIDADE --> DECISAO[Motor de Decisão]
-
-    PERFORMANCE --> DECISAO
-    TENDENCIA --> DECISAO
-    FADIGA --> DECISAO
-
-    DECISAO --> IA[Analista IA]
-    IA --> ALERTA[Central de Alertas]
-
-    ALERTA --> APROVAR[Aprovação Humana]
-    APROVAR --> META_API[Meta Marketing API]
-```
-
----
-
-# Roadmap
-
-## Fase 0 — Base e versionamento
-
-Status: em andamento.
-
-- [x] Criar repositório GitHub.
-- [x] Salvar workflows existentes.
-- [x] Criar documentação inicial.
-- [x] Definir padrão de nomes dos nodes.
-- [x] Definir padrão de comentários em código.
-- [ ] Criar branch de desenvolvimento.
-
----
-
-## Fase 1 — Corrigir a coleta de dados
-
-Objetivo: criar uma base histórica confiável.
-
-- [ ] Corrigir mapeamento de CPC dos conjuntos.
-- [ ] Remover risco de períodos históricos duplicados.
-- [ ] Definir coleta diária.
-- [ ] Criar chave única para cada registro.
-- [ ] Definir banco principal de métricas.
-- [ ] Avaliar migração do histórico principal para Supabase/PostgreSQL.
-- [ ] Manter Google Sheets como camada opcional de visualização/exportação.
-- [ ] Padronizar datas em `America/Sao_Paulo`.
-
----
-
-## Fase 2 — Motor de Performance
-
-Objetivo: calcular métricas de forma determinística antes da IA.
-
-Criar indicadores como:
-
-- [ ] custo por conversa;
-- [ ] CTR;
-- [ ] CTR de link;
-- [ ] CPC;
-- [ ] CPM;
-- [ ] taxa clique → conversa;
-- [ ] frequência;
-- [ ] velocidade de gasto;
-- [ ] comparação com média da conta;
-- [ ] score de performance.
-
----
-
-## Fase 3 — Tendência e Fadiga
-
-Objetivo: identificar quando um anúncio começa a perder eficiência.
-
-- [ ] Comparar janelas de 3 dias.
-- [ ] Comparar janelas de 7 dias.
-- [ ] Comparar janelas de 14 dias.
-- [ ] Comparar janelas de 30 dias.
-- [ ] Detectar queda de CTR.
-- [ ] Detectar aumento de CPC.
-- [ ] Detectar aumento de custo por conversa.
-- [ ] Detectar aumento de frequência.
-- [ ] Criar score de fadiga.
-
----
-
-## Fase 4 — Qualidade dos Leads
-
-Objetivo: parar de otimizar apenas para conversa barata.
-
-Integrar dados do atendimento/CRM para identificar:
-
-- [ ] conversa iniciada;
-- [ ] lead identificado;
-- [ ] lead qualificado;
-- [ ] agendamento;
-- [ ] proposta;
-- [ ] venda.
-
-Novas métricas:
-
-- [ ] custo por lead qualificado;
-- [ ] custo por agendamento;
-- [ ] custo por proposta;
-- [ ] custo por venda;
-- [ ] taxa de qualificação por anúncio;
-- [ ] taxa de conversão por campanha.
-
----
-
-## Fase 5 — Motor de Decisão
-
-Objetivo: substituir critérios subjetivos por regras matemáticas.
-
-Exemplo de índice:
-
-```text
-indice_custo = custo_anuncio / custo_medio_conta
-```
-
-Classificação inicial a ser validada com dados reais:
-
-```text
-<= 0,70      excelente
-0,71 - 0,90  bom
-0,91 - 1,10  normal
-1,11 - 1,30  atenção
-> 1,30       ruim
-```
-
-As decisões também deverão considerar volume mínimo e tempo de coleta.
+Cada melhoria deverá registrar uma hipótese e permitir comparar o resultado antes e depois da alteração.
 
 Exemplo:
 
 ```text
-bom custo
-+ volume mínimo
-+ histórico suficiente
-+ qualidade acima da média
-= candidato a escala
+Hipótese:
+CTR caiu por fadiga criativa
+
+Antes:
+CTR 1,21%
+CPL R$ 72
+
+Depois:
+CTR 1,78%
+CPL R$ 51
+
+Conclusão:
+Hipótese confirmada
 ```
 
-Nenhuma regra crítica deverá depender apenas da interpretação da IA.
+Esse histórico deverá formar a memória de aprendizado da conta.
 
 ---
 
-## Fase 6 — Central de Alertas e Ações
+## Endpoints planejados
 
-Objetivo: transformar diagnóstico em ação operacional.
-
-Alertas possíveis:
+Backend inicial:
 
 ```text
-ESCALAR
-MANTER
-OBSERVAR
-REDUZIR ORÇAMENTO
-PAUSAR
-AJUSTAR COPY
-AJUSTAR CRIATIVO
-CRIAR NOVA VARIAÇÃO
+GET /
+GET /health
+GET /api/v1/health
 ```
 
-Primeira versão:
+Endpoints previstos para evolução do MVP:
 
 ```text
-Sistema recomenda
+GET  /api/v1/dashboard
+GET  /api/v1/clients
+GET  /api/v1/campaigns
+GET  /api/v1/campaigns/{id}
+GET  /api/v1/analyses
+GET  /api/v1/improvements
+
+POST  /api/v1/improvements
+PATCH /api/v1/improvements/{id}
+
+POST /api/v1/analysis/run
+POST /api/v1/sync/meta
+```
+
+---
+
+# Como testar
+
+Esta seção segue o planejamento atual do MVP. Os testes devem acompanhar a implementação das etapas; o documento de planejamento ainda não define comandos específicos de instalação ou execução local.
+
+## 1. Backend base
+
+Primeira validação prevista para a Etapa 1.
+
+Com o backend FastAPI em execução, testar:
+
+```http
+GET /
+GET /health
+GET /api/v1/health
+```
+
+Resultado esperado:
+
+- aplicação responde;
+- serviço está disponível;
+- endpoint de saúde retorna sucesso;
+- configuração via `.env` foi carregada sem impedir a inicialização.
+
+## 2. Supabase
+
+Na Etapa 2, depois de configurar a conexão do FastAPI com o Supabase:
+
+Testar:
+
+- conexão com o banco;
+- leitura de um registro;
+- escrita de um registro;
+- carregamento das variáveis de ambiente;
+- comportamento da aplicação quando a configuração de banco estiver ausente ou inválida.
+
+## 3. Modelo de dados
+
+Depois da criação das tabelas da Etapa 3, conferir a existência e funcionamento de:
+
+```text
+clients
+meta_accounts
+campaigns
+adsets
+ads
+campaign_metrics
+adset_metrics
+ad_metrics
+ai_analyses
+recommendations
+improvements
+alerts
+```
+
+Validar pelo menos:
+
+- criação de registros;
+- leitura dos registros;
+- relacionamento entre cliente, conta, campanha, conjunto e anúncio;
+- persistência das métricas históricas;
+- persistência das análises sem sobrescrever histórico.
+
+## 4. Integração n8n → dados
+
+Na Etapa 4, adaptar os fluxos existentes para persistir dados no modelo do SaaS.
+
+Validar o caminho:
+
+```text
+Meta Graph API
       ↓
-Gestor aprova
+n8n
       ↓
-n8n executa
+normalização
       ↓
-Meta Marketing API
+Supabase
 ```
 
-Alterações automáticas de orçamento só serão implementadas depois que a base de dados e o motor de decisão estiverem validados.
+Conferir:
 
----
+- campanhas recebidas;
+- conjuntos recebidos;
+- anúncios recebidos;
+- métricas normalizadas;
+- datas corretas;
+- histórico preservado.
 
-## Fase 7 — Laboratório de Testes
+## 5. API do dashboard
 
-Objetivo: registrar hipóteses e descobrir padrões vencedores.
+Quando a Etapa 5 estiver implementada, testar:
 
-Cada teste deverá registrar elementos como:
-
-```text
-gancho
-oferta
-criativo
-formato
-CTA
-público
-campanha
-resultado
+```http
+GET /api/v1/dashboard
+GET /api/v1/clients
+GET /api/v1/campaigns
+GET /api/v1/campaigns/{id}
+GET /api/v1/analyses
+GET /api/v1/improvements
 ```
 
-Exemplo:
+Exemplo planejado:
 
-```text
-gancho: parcela
-oferta: entrada facilitada
-formato: vídeo curto
-CTA: simular agora
+```http
+GET /api/v1/dashboard?client_id=123&period=30d
 ```
 
-O sistema poderá posteriormente identificar quais combinações geram melhor qualidade de lead.
+Resposta esperada conceitualmente:
 
----
-
-## Fase 8 — Inteligência de Criativos
-
-Objetivo: usar o histórico real da conta para gerar novas hipóteses.
-
-A IA poderá aprender padrões como:
-
-```text
-Gancho A → CTR alto
-Gancho B → mais conversas
-Gancho C → mais leads qualificados
-Criativo D → menor custo por qualificado
-```
-
-Novos anúncios deverão ser criados a partir de hipóteses mensuráveis, e não apenas de geração aleatória de texto.
-
----
-
-## Fase 9 — Multi-cliente
-
-Objetivo: permitir que a arquitetura funcione com várias contas de anúncios.
-
-- [ ] Cadastro de clientes.
-- [ ] Conta Meta por cliente.
-- [ ] Metas individuais.
-- [ ] CPL alvo individual.
-- [ ] Regras individualizadas.
-- [ ] Credenciais isoladas.
-- [ ] Relatórios por cliente.
-- [ ] Alertas por cliente.
-
-Os conceitos presentes no workflow `TERMOMETRO_CAMPANHA.json` poderão servir como referência nesta fase.
-
----
-
-# Padrão obrigatório para nodes n8n
-
-Todos os nodes deverão possuir nomes em **português claro e descritivo**.
-
-Evitar:
-
-```text
-Code1
-Merge2
-HTTP Request3
-Set4
-IF5
-```
-
-Preferir:
-
-```text
-BUSCA CAMPANHAS META
-NORMALIZA DADOS DOS ANÚNCIOS
-CALCULA MÉTRICAS DE PERFORMANCE
-COMPARA PERÍODO DE 7 DIAS
-VERIFICA FADIGA DO ANÚNCIO
-ENVIA ALERTA NO TELEGRAM
-```
-
-O nome do node deve permitir entender sua função sem precisar abri-lo.
-
----
-
-# Padrão obrigatório para código
-
-O código deve priorizar legibilidade.
-
-## Variáveis
-
-Preferir nomes claros:
-
-```javascript
-const investimento = 100;
-const conversasIniciadas = 12;
-const custoMedioConta = 8.50;
-```
-
-Evitar abreviações sem necessidade:
-
-```javascript
-const inv = 100;
-const conv = 12;
-const cmc = 8.50;
-```
-
-## Funções
-
-Exemplo:
-
-```javascript
-// Calcula quanto foi gasto para gerar cada conversa.
-// Retorna null quando ainda não existem conversas.
-function calcularCustoPorConversa(investimento, conversas) {
-  if (conversas <= 0) {
-    return null;
-  }
-
-  return investimento / conversas;
+```json
+{
+  "spend": 18420,
+  "leads": 387,
+  "cpl": 47.60,
+  "ctr": 1.82,
+  "campaigns_attention": 3,
+  "improvements_pending": 7
 }
 ```
 
-## Comentários
+## 6. Comparação de períodos
 
-Os comentários devem ser breves e explicar principalmente:
-
-- o objetivo de uma etapa importante;
-- uma regra de negócio;
-- o motivo de uma decisão não óbvia.
-
-Evitar comentar cada linha do código.
-
-Exemplo:
-
-```javascript
-// Compara o anúncio com a média da conta para gerar um índice relativo.
-const indiceCusto = custoAnuncio / custoMedioConta;
-```
-
----
-
-# Convenção para nomes de workflows
-
-Os novos workflows deverão seguir uma sequência lógica.
-
-Exemplo inicial:
+Testar pelo menos:
 
 ```text
-META ADS | 01 | COLETA DE DADOS
-META ADS | 02 | PROCESSA MÉTRICAS
-META ADS | 03 | ANALISA PERFORMANCE
-META ADS | 04 | GERA ALERTAS
-META ADS | 05 | MONITORA ORÇAMENTO
-META ADS | 06 | QUALIDADE DOS LEADS
-META ADS | 07 | DETECTA FADIGA
-META ADS | 08 | GERENCIA TESTES
-META ADS | 09 | MOTOR DE DECISÃO
-META ADS | 10 | EXECUTA AÇÕES
+últimos 7 dias
+VS
+7 dias anteriores
 ```
 
----
+Conferir se investimento, leads, CPL, CTR e CPC são calculados para os dois períodos e se as variações são apresentadas corretamente.
 
-# Estratégia de Git
+## 7. Análise de IA
 
-## `main`
+Quando a camada de inteligência estiver conectada, fornecer dados conhecidos e verificar se a análise contém:
 
-Representa a versão estável/documentada do projeto.
+- problema identificado;
+- possíveis causas;
+- recomendação;
+- prioridade.
 
-Não deverá receber alterações experimentais diretamente.
-
-## `desenvolvimento`
-
-Branch usada para integrar a próxima geração dos workflows antes de chegar à `main`.
-
-## Branches de funcionalidade
-
-Quando necessário, poderão ser criadas branches específicas a partir de `desenvolvimento`.
-
-Exemplos:
+A análise deve respeitar a hierarquia:
 
 ```text
-feat/coleta-diaria
-feat/motor-performance
-feat/fadiga-criativos
-feat/qualidade-leads
-fix/cpc-conjuntos
+Campanha → Conjunto → Anúncio
 ```
 
-Fluxo esperado:
+Também deve ser possível confirmar que cada nova execução cria histórico em vez de sobrescrever a anterior.
+
+## 8. Melhorias
+
+Quando os endpoints de melhoria existirem, testar o ciclo:
 
 ```text
-feature/fix
-    ↓
-desenvolvimento
-    ↓
-Pull Request
-    ↓
-main
+Pendente
+   ↓
+Em teste
+   ↓
+Aplicada
+   ↓
+Validando
+   ↓
+Resolvida ou Descartada
 ```
 
----
+Validar também o registro de:
 
-# Commits
+- hipótese;
+- métricas antes;
+- data da alteração;
+- métricas depois;
+- conclusão.
 
-Preferir mensagens curtas e descritivas.
+## 9. Sincronização e análise manual
 
-Exemplos:
+Quando os endpoints estiverem implementados, validar:
 
-```text
-fix: corrige CPC dos conjuntos
-feat: adiciona coleta diária de anúncios
-feat: cria cálculo de tendência de 7 dias
-docs: atualiza arquitetura do projeto
-refactor: separa cálculo de métricas da análise por IA
+```http
+POST /api/v1/sync/meta
+POST /api/v1/analysis/run
 ```
 
----
+O primeiro deverá iniciar/solicitar a sincronização de dados da Meta.
 
-# Segurança
+O segundo deverá iniciar/solicitar uma análise usando os dados já disponíveis.
 
-Este repositório é público.
-
-Nunca versionar:
-
-- access tokens da Meta;
-- chaves de API;
-- senhas;
-- secrets;
-- URLs contendo tokens;
-- credenciais de banco;
-- dados pessoais de clientes;
-- números de telefone de leads;
-- dados sensíveis do CRM.
-
-Os workflows devem utilizar credenciais configuradas no n8n e variáveis de ambiente sempre que possível.
+Os contratos exatos de request/response ainda deverão ser definidos durante a implementação.
 
 ---
 
-# Regra para automações críticas
+## Roadmap inicial
 
-Durante as primeiras versões, o sistema poderá **recomendar** alterações, mas não deverá alterar automaticamente orçamento, status de campanhas ou anúncios sem uma etapa explícita de aprovação.
+### Etapa 1 — Backend base
 
-A automação completa só deverá ser habilitada quando:
+- [ ] criar FastAPI;
+- [ ] endpoint `/health`;
+- [ ] configurações via `.env`;
+- [ ] Dockerfile;
+- [ ] estrutura de testes;
+- [ ] organização por rotas, serviços e modelos.
 
-1. a coleta estiver validada;
-2. o histórico estiver livre de duplicidade;
-3. as métricas estiverem validadas;
-4. o motor de decisão estiver testado;
-5. existir histórico suficiente para avaliar falsos positivos.
+**Status no planejamento:** iniciado.
+
+### Etapa 2 — Supabase
+
+- [ ] conectar FastAPI ao Supabase;
+- [ ] configurar variáveis de ambiente;
+- [ ] criar cliente de banco;
+- [ ] testar leitura e escrita.
+
+### Etapa 3 — Modelo de dados
+
+- [ ] criar tabelas iniciais do SaaS.
+
+### Etapa 4 — Integração n8n
+
+- [ ] adaptar os fluxos existentes para persistir dados no modelo do SaaS.
+
+### Etapa 5 — API do dashboard
+
+- [ ] `/dashboard`;
+- [ ] `/clients`;
+- [ ] `/campaigns`;
+- [ ] `/campaigns/{id}`;
+- [ ] `/analyses`;
+- [ ] `/improvements`.
+
+### Etapa 6 — Frontend
+
+- [ ] construir dashboard em Next.js.
+
+### Etapa 7 — Inteligência
+
+- [ ] criar regras de diagnóstico da IA.
+
+### Etapa 8 — Melhorias e aprendizado
+
+- [ ] registrar melhorias;
+- [ ] registrar antes/depois;
+- [ ] registrar resultados e aprendizados.
 
 ---
 
-# Próxima etapa
+## Princípio central
 
-A primeira etapa técnica da branch `desenvolvimento` será reconstruir a camada de coleta.
+O DescompliADS não deve ser apenas mais um dashboard de Meta Ads.
 
-Prioridade:
+A proposta é:
 
-```text
-1. corrigir CPC dos conjuntos
-2. substituir histórico sobreposto por coleta diária
-3. definir armazenamento sem duplicidade
-4. preparar métricas de 3, 7, 14 e 30 dias
-5. separar conversa de lead qualificado
-```
-
-Somente depois dessa fundação o projeto avançará para decisões automáticas de escala, pausa, público, orçamento e criativos.
-
----
-
-## Tecnologias previstas
-
-- n8n
-- Meta Marketing API
-- Supabase / PostgreSQL
-- Google Sheets
-- Notion
-- Telegram / WhatsApp
-- APIs de modelos de linguagem
-- GitHub
-
----
-
-## Status
-
-Projeto em desenvolvimento.
-
-A `main` mantém a base inicial e o histórico dos workflows existentes. As próximas implementações serão desenvolvidas em branches separadas e integradas por Pull Request.
+> Um painel para gestores de tráfego que transforma métricas do Meta Ads em diagnóstico, prioridades e histórico de melhorias.
