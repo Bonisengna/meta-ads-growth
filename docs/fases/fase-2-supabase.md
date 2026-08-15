@@ -80,6 +80,18 @@ public.app_health
 
 Essa tabela não faz parte do modelo comercial do SaaS. Ela existe para validar a infraestrutura antes da Fase 3.
 
+## Validação automatizada
+
+Foi adicionado GitHub Actions para executar os testes do backend em Python 3.12.
+
+A primeira execução completa da Fase 2 instalou as dependências pinadas, incluindo `supabase==2.31.0`, e retornou:
+
+```text
+6 passed, 1 warning
+```
+
+O warning atual é uma depreciação do `TestClient`/HTTPX e não causou falha nos testes. Ele fica registrado como dívida técnica para atualização posterior da camada de testes.
+
 ## Como testar
 
 ### 1. Testes automatizados
@@ -191,6 +203,7 @@ Implementado:
 - [x] teste unitário de leitura;
 - [x] teste unitário de escrita e limpeza;
 - [x] smoke test manual;
+- [x] CI do backend com 6 testes aprovados;
 
 Pendente para concluir a Fase 2 em ambiente real:
 
