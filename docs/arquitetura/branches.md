@@ -1,64 +1,59 @@
-# Branch meta-ads-pro
+# Estrutura de branches
 
-## Objetivo
+## `main`
 
-A branch `meta-ads-pro` passa a ser a trilha oficial de desenvolvimento do MVP SaaS do **DescompliADS**.
+Base estável do repositório. Não é a branch de desenvolvimento diário.
 
-Ela foi sincronizada a partir do estado atual da branch `desenvolvimento` após a implementação inicial da **Fase 1 — Backend base**.
+## `n8n-operacional`
+
+Sistema operacional atual baseado em n8n.
+
+Estrutura principal:
+
+```text
+coleta-meta-ads/
+performance/
+tendencia-fadiga/
+ia/
+google-sheets/
+arquivo/
+```
+
+A pasta `arquivo/` preserva versões anteriores, workflows originais e os módulos 05/06 de tracking/feedback que não fazem parte do fluxo operacional atual.
+
+## `meta-ads-pro`
+
+Trilha oficial de desenvolvimento do MVP SaaS **DescompliADS**.
+
+Estrutura principal:
+
+```text
+backend/        FastAPI + API REST
+supabase/       banco e persistência do SaaS
+frontend/       Next.js
+inteligencia/   camada analítica e IA
+docs/           arquitetura, fases e planejamento
+```
 
 ## Regra de uso
 
-A partir desta migração:
+- mudanças do sistema n8n atual → `n8n-operacional`;
+- mudanças do SaaS DescompliADS → `meta-ads-pro`;
+- promoção deliberada de uma base estável → `main`.
 
-- `main` continua como branch estável do repositório;
-- `desenvolvimento` preserva o histórico e a evolução dos fluxos anteriores do projeto Meta Ads Growth;
-- `meta-ads-pro` concentra a evolução do MVP SaaS DescompliADS.
+O `meta-ads-pro` não deve manter cópias dos workflows operacionais como segunda fonte de verdade. Quando a integração n8n entrar no MVP, ela será tratada como uma integração do SaaS na fase correspondente.
 
-## Escopo do MVP SaaS nesta branch
-
-As próximas fases devem ser desenvolvidas em `meta-ads-pro`:
+## Roadmap do SaaS
 
 1. Backend base;
 2. Supabase;
 3. Modelo de dados;
-4. Integração n8n com o modelo SaaS;
+4. Integração dos dados existentes;
 5. API do dashboard;
 6. Frontend Next.js;
 7. Inteligência e diagnósticos;
 8. Melhorias e aprendizado.
 
-## Estado inicial da migração
-
-A branch foi posicionada no mesmo commit que representava o estado atual de `desenvolvimento` após a Fase 1:
-
-```text
-2f30abde9d6ebce4ff3b179dc1f6a4b66600d4f0
-```
-
-Isso inclui, entre outros arquivos:
-
-```text
-backend/
-README.md
-docs/fase-1-backend.md
-workflows/
-database/
-```
-
-## Próximo passo
-
-Antes de iniciar a Fase 2, validar o backend da Fase 1 em ambiente real de desenvolvimento/deploy.
-
-Depois disso, a **Fase 2 — Supabase** deve ser implementada diretamente na branch `meta-ads-pro`.
-
 ## Segurança
 
-Não versionar:
-
-- `.env` real;
-- chaves do Supabase;
-- tokens Meta;
-- credenciais n8n;
-- secrets de produção.
-
-Apenas arquivos de exemplo, como `.env.example`, devem permanecer no GitHub.
+Não versionar `.env` real, chaves do Supabase, tokens Meta, credenciais n8n ou secrets de produção.
