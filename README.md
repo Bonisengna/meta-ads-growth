@@ -35,14 +35,30 @@ A automação n8n operacional é mantida separadamente na branch `n8n-operaciona
 
 ## Fases do MVP
 
-1. Backend base — implementado e aguardando validação de deploy.
-2. Supabase.
+1. Backend base — implementação inicial concluída; validação de deploy pendente.
+2. Supabase — integração no código implementada; conexão com projeto exclusivo do DescompliADS pendente.
 3. Modelo de dados.
 4. Integração dos dados existentes.
 5. API do dashboard.
 6. Frontend Next.js.
 7. Inteligência.
 8. Melhorias e aprendizado.
+
+## Fase atual
+
+**Fase 2 — Supabase**
+
+Já existem:
+
+- cliente Supabase no FastAPI;
+- configuração segura por `.env`;
+- endpoint `/health/database`;
+- migration técnica `supabase/migrations/0001_app_health.sql`;
+- testes unitários de leitura/escrita;
+- smoke test manual;
+- GitHub Actions para executar os testes do backend.
+
+Documentação: `docs/fases/fase-2-supabase.md`.
 
 ## Branches
 
