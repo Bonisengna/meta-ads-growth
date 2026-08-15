@@ -1,0 +1,1 @@
+"""Aplicação backend do DescompliADS."""
