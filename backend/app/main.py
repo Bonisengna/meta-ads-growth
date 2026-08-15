@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.entities import router as entities_router
 from app.api.health import router as health_router
 from app.config.settings import get_settings
 
@@ -15,6 +16,7 @@ app = FastAPI(
 # Health disponível na raiz e também sob o prefixo versionado da API.
 app.include_router(health_router)
 app.include_router(health_router, prefix=settings.api_v1_prefix)
+app.include_router(entities_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/", tags=["Raiz"], summary="Identifica a API")
