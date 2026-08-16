@@ -1,10 +1,17 @@
+from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import SupabaseClient
 from app.models.entities import (
+    AdMetricRead,
+    AdRead,
+    AdsetMetricRead,
+    AdsetRead,
     CampaignRead,
+    CampaignMetricRead,
     ClientRead,
     DashboardRead,
     EntityStatus,
@@ -12,11 +19,14 @@ from app.models.entities import (
     Page,
 )
 from app.services.entity_services import (
+    AdService,
+    AdsetService,
     CampaignService,
     ClientService,
     DashboardService,
     EntityNotFoundError,
     MetaAccountService,
+    MetricService,
 )
 
 router = APIRouter()
@@ -101,9 +111,136 @@ def get_campaign(campaign_id: UUID, client: SupabaseClient) -> dict[str, object]
         raise database_unavailable(exc) from exc
 
 
-@router.get("/dashboard", response_model=DashboardRead, tags=["Dashboard"])
-def get_dashboard(client: SupabaseClient) -> dict[str, object]:
+@router.get("/adsets", response_model=Page[AdsetRead], tags=["Conjuntos"])
+def list_adsets(
+    client: SupabaseClient,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status_filter: EntityStatus | None = Query(None, alias="status"),
+    campaign_id: UUID | None = None,
+) -> dict[str, object]:
     try:
-        return DashboardService(client).get_dashboard()
+        return AdsetService(client).list_adsets(page, page_size, status_filter, campaign_id)
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.get("/adsets/{adset_id}", response_model=AdsetRead, tags=["Conjuntos"])
+def get_adset(adset_id: UUID, client: SupabaseClient) -> dict[str, object]:
+    try:
+        return AdsetService(client).get_adset(adset_id)
+    except EntityNotFoundError as exc:
+        raise not_found(exc) from exc
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.get("/ads", response_model=Page[AdRead], tags=["Anúncios"])
+def list_ads(
+    client: SupabaseClient,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status_filter: EntityStatus | None = Query(None, alias="status"),
+    adset_id: UUID | None = None,
+) -> dict[str, object]:
+    try:
+        return AdService(client).list_ads(page, page_size, status_filter, adset_id)
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.get("/ads/{ad_id}", response_model=AdRead, tags=["Anúncios"])
+def get_ad(ad_id: UUID, client: SupabaseClient) -> dict[str, object]:
+    try:
+        return AdService(client).get_ad(ad_id)
+    except EntityNotFoundError as exc:
+        raise not_found(exc) from exc
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.get(
+    "/metrics/campaigns", response_model=Page[CampaignMetricRead], tags=["Métricas"]
+)
+def list_campaign_metrics(
+    client: SupabaseClient,
+    date_from: date,
+    date_to: date,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    campaign_id: UUID | None = None,
+) -> dict[str, object]:
+    return list_metrics(client, "campaigns", date_from, date_to, page, page_size, campaign_id)
+
+
+@router.get("/metrics/adsets", response_model=Page[AdsetMetricRead], tags=["Métricas"])
+def list_adset_metrics(
+    client: SupabaseClient,
+    date_from: date,
+    date_to: date,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    adset_id: UUID | None = None,
+) -> dict[str, object]:
+    return list_metrics(client, "adsets", date_from, date_to, page, page_size, adset_id)
+
+
+@router.get("/metrics/ads", response_model=Page[AdMetricRead], tags=["Métricas"])
+def list_ad_metrics(
+    client: SupabaseClient,
+    date_from: date,
+    date_to: date,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    ad_id: UUID | None = None,
+) -> dict[str, object]:
+    return list_metrics(client, "ads", date_from, date_to, page, page_size, ad_id)
+
+
+def list_metrics(
+    client: SupabaseClient,
+    level: str,
+    date_from: date,
+    date_to: date,
+    page: int,
+    page_size: int,
+    entity_id: UUID | None,
+) -> dict[str, object]:
+    if date_from > date_to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="date_from não pode ser posterior a date_to.",
+        )
+    try:
+        return MetricService(client).list_metrics(
+            level, date_from, date_to, page, page_size, entity_id
+        )
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.get("/dashboard", response_model=DashboardRead, tags=["Dashboard"])
+def get_dashboard(
+    client: SupabaseClient,
+    days: Literal[7, 14, 30, 90, 120] = 30,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    client_id: UUID | None = None,
+    meta_account_id: UUID | None = None,
+    campaign_id: UUID | None = None,
+) -> dict[str, object]:
+    try:
+        return DashboardService(client).get_dashboard(
+            days=days,
+            date_from=date_from,
+            date_to=date_to,
+            client_id=client_id,
+            meta_account_id=meta_account_id,
+            campaign_id=campaign_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
     except Exception as exc:
         raise database_unavailable(exc) from exc

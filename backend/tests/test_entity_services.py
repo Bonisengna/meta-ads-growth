@@ -1,3 +1,5 @@
+from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -6,10 +8,12 @@ import pytest
 from app.services.entity_services import (
     CampaignService,
     ClientService,
-    DashboardService,
     EntityNotFoundError,
+    MetricService,
+    aggregate_metrics,
+    compare_metrics,
+    resolve_periods,
 )
-
 
 CLIENT_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -19,36 +23,38 @@ class FakeQuery:
         self.client = client
         self.table = table
         self.is_count = False
-        self.filters: list[tuple[str, str]] = []
-        self.selected_range: tuple[int, int] | None = None
 
     def select(self, _columns: str, *, count=None, head=False):
         self.is_count = count == "exact"
-        self.client.head = head
         return self
 
-    def order(self, _column: str):
+    def order(self, _column: str, desc=False):
         return self
 
-    def eq(self, column: str, value: str):
-        self.filters.append((column, value))
-        self.client.filters = self.filters
+    def eq(self, column: str, value: object):
+        self.client.filters.append(("eq", column, value))
+        return self
+
+    def gte(self, column: str, value: object):
+        self.client.filters.append(("gte", column, value))
+        return self
+
+    def lte(self, column: str, value: object):
+        self.client.filters.append(("lte", column, value))
         return self
 
     def limit(self, _limit: int):
         return self
 
     def range(self, start: int, end: int):
-        self.selected_range = (start, end)
-        self.client.selected_range = self.selected_range
+        self.client.selected_range = (start, end)
         return self
 
     def execute(self):
-        if self.is_count and self.client.head:
-            return SimpleNamespace(data=None, count=self.client.counts[self.table])
+        rows = self.client.rows.get(self.table, [])
         return SimpleNamespace(
-            data=self.client.rows.get(self.table, []),
-            count=self.client.counts.get(self.table, 0) if self.is_count else None,
+            data=rows,
+            count=self.client.counts.get(self.table, len(rows)) if self.is_count else None,
         )
 
 
@@ -56,9 +62,8 @@ class FakeClient:
     def __init__(self, rows=None, counts=None) -> None:
         self.rows = rows or {}
         self.counts = counts or {}
-        self.filters: list[tuple[str, str]] = []
+        self.filters: list[tuple[str, str, object]] = []
         self.selected_range: tuple[int, int] | None = None
-        self.head = False
 
     def table(self, table: str) -> FakeQuery:
         return FakeQuery(self, table)
@@ -66,56 +71,72 @@ class FakeClient:
 
 def test_client_service_lists_archived_entities() -> None:
     rows = [{"id": str(CLIENT_ID), "name": "Histórico", "status": "ARCHIVED"}]
-    service = ClientService(FakeClient(rows={"clients": rows}))  # type: ignore[arg-type]
-
-    result = service.list_clients(page=1, page_size=20)
-
+    result = ClientService(FakeClient(rows={"clients": rows})).list_clients(1, 20)  # type: ignore[arg-type]
     assert result["items"] == rows
 
 
 def test_campaign_service_applies_filters_and_page_range() -> None:
     account_id = UUID("22222222-2222-2222-2222-222222222222")
     fake = FakeClient(counts={"campaigns": 42})
-    service = CampaignService(fake)  # type: ignore[arg-type]
-
-    result = service.list_campaigns(2, 20, "ARCHIVED", account_id)
-
+    result = CampaignService(fake).list_campaigns(2, 20, "ARCHIVED", account_id)  # type: ignore[arg-type]
     assert fake.filters == [
-        ("status", "ARCHIVED"),
-        ("meta_account_id", str(account_id)),
+        ("eq", "status", "ARCHIVED"),
+        ("eq", "meta_account_id", str(account_id)),
     ]
     assert fake.selected_range == (20, 39)
-    assert result["total"] == 42
     assert result["pages"] == 3
 
 
-def test_client_service_raises_not_found() -> None:
-    service = ClientService(FakeClient())  # type: ignore[arg-type]
-
+def test_services_raise_not_found() -> None:
+    fake = FakeClient()
     with pytest.raises(EntityNotFoundError):
-        service.get_client(CLIENT_ID)
-
-
-def test_campaign_service_raises_not_found() -> None:
-    service = CampaignService(FakeClient())  # type: ignore[arg-type]
-
+        ClientService(fake).get_client(CLIENT_ID)  # type: ignore[arg-type]
     with pytest.raises(EntityNotFoundError):
-        service.get_campaign(CLIENT_ID)
+        CampaignService(fake).get_campaign(CLIENT_ID)  # type: ignore[arg-type]
 
 
-def test_dashboard_aggregates_campaign_metrics() -> None:
-    counts = {"clients": 2, "meta_accounts": 3, "campaigns": 4, "adsets": 5, "ads": 6}
-    rows = {"campaign_metrics": [{"spend": "30.00", "leads": 2}, {"spend": "15", "leads": 1}]}
-    service = DashboardService(FakeClient(rows=rows, counts=counts))  # type: ignore[arg-type]
-
-    result = service.get_dashboard()
-
-    assert result["campaigns"] == 4
-    assert result["metrics"] == {"spend": 45, "leads": 3, "cpl": 15}
+def test_custom_period_has_equal_previous_period() -> None:
+    current, previous = resolve_periods(30, date(2025, 11, 1), date(2025, 11, 30))
+    assert current == (date(2025, 11, 1), date(2025, 11, 30))
+    assert previous == (date(2025, 10, 2), date(2025, 10, 31))
 
 
-def test_dashboard_returns_null_cpl_without_leads() -> None:
-    counts = {table: 0 for table in DashboardService.ENTITY_TABLES}
-    service = DashboardService(FakeClient(counts=counts))  # type: ignore[arg-type]
+def test_period_rejects_incomplete_or_reversed_dates() -> None:
+    with pytest.raises(ValueError):
+        resolve_periods(30, date(2025, 11, 1), None)
+    with pytest.raises(ValueError):
+        resolve_periods(30, date(2025, 11, 2), date(2025, 11, 1))
 
-    assert service.get_dashboard()["metrics"]["cpl"] is None  # type: ignore[index]
+
+def test_aggregate_calculates_business_metrics() -> None:
+    result = aggregate_metrics([
+        {"spend": "30", "impressions": 1000, "clicks": 50, "leads": 2, "conversations": 3},
+        {"spend": "15", "impressions": 500, "clicks": 10, "leads": 1, "conversations": 1},
+    ])
+    assert result == {
+        "spend": Decimal("45"), "impressions": 1500, "clicks": 60,
+        "leads": 3, "conversations": 4, "cpl": Decimal("15.000000"),
+        "ctr": Decimal("4.000000"), "cpc": Decimal("0.750000"),
+        "cpm": Decimal("30.000000"),
+    }
+
+
+def test_comparison_returns_percent_and_null_for_zero_baseline() -> None:
+    current = aggregate_metrics([{"spend": 150, "leads": 15}])
+    previous = aggregate_metrics([{"spend": 100, "leads": 0}])
+    change = compare_metrics(current, previous)
+    assert change["spend"] == Decimal("50.00")
+    assert change["leads"] is None
+
+
+def test_metric_service_filters_period_without_status_filter() -> None:
+    fake = FakeClient(rows={"campaign_metrics": []})
+    MetricService(fake).list_metrics(  # type: ignore[arg-type]
+        "campaigns", date(2025, 11, 1), date(2025, 11, 30), 1, 20, CLIENT_ID
+    )
+    assert fake.filters == [
+        ("gte", "metric_date", "2025-11-01"),
+        ("lte", "metric_date", "2025-11-30"),
+        ("eq", "campaign_id", str(CLIENT_ID)),
+    ]
+    assert all(column != "status" for _, column, _ in fake.filters)

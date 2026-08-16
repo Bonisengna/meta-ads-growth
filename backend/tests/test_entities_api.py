@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -17,16 +17,30 @@ class FakeQuery:
         self.table = table
         self.is_count = False
         self.head = False
+        self.filters = []
 
     def select(self, _columns: str, *, count=None, head=False):
         self.is_count = count == "exact"
         self.head = head
         return self
 
-    def order(self, _column: str):
+    def order(self, _column: str, desc=False):
         return self
 
-    def eq(self, _column: str, _value: str):
+    def eq(self, column: str, value: str):
+        self.filters.append(("eq", column, value))
+        return self
+
+    def in_(self, column: str, values: list[str]):
+        self.filters.append(("in", column, values))
+        return self
+
+    def gte(self, column: str, value: str):
+        self.filters.append(("gte", column, value))
+        return self
+
+    def lte(self, column: str, value: str):
+        self.filters.append(("lte", column, value))
         return self
 
     def limit(self, _limit: int):
@@ -38,9 +52,18 @@ class FakeQuery:
     def execute(self):
         if self.client.failure:
             raise RuntimeError("database error")
-        if self.is_count and self.head:
-            return SimpleNamespace(data=None, count=self.client.counts.get(self.table, 0))
         rows = self.client.rows.get(self.table, [])
+        for operation, column, value in self.filters:
+            if operation == "eq":
+                rows = [row for row in rows if str(row.get(column)) == str(value)]
+            elif operation == "in":
+                rows = [row for row in rows if str(row.get(column)) in value]
+            elif operation == "gte":
+                rows = [row for row in rows if str(row.get(column)) >= str(value)]
+            elif operation == "lte":
+                rows = [row for row in rows if str(row.get(column)) <= str(value)]
+        if self.is_count and self.head:
+            return SimpleNamespace(data=None, count=len(rows))
         return SimpleNamespace(data=rows, count=len(rows) if self.is_count else None)
 
 
@@ -124,6 +147,13 @@ def test_all_read_routes_are_documented() -> None:
         "/api/v1/meta-accounts",
         "/api/v1/campaigns",
         "/api/v1/campaigns/{campaign_id}",
+        "/api/v1/adsets",
+        "/api/v1/adsets/{adset_id}",
+        "/api/v1/ads",
+        "/api/v1/ads/{ad_id}",
+        "/api/v1/metrics/campaigns",
+        "/api/v1/metrics/adsets",
+        "/api/v1/metrics/ads",
         "/api/v1/dashboard",
     }
 
@@ -131,11 +161,42 @@ def test_all_read_routes_are_documented() -> None:
 
 
 def test_dashboard_serializes_money_as_json_number() -> None:
-    fake = FakeClient(rows={"campaign_metrics": [{"spend": "12.50", "leads": 1}]})
-    fake.counts = {table: 0 for table in ("clients", "meta_accounts", "campaigns", "adsets", "ads")}
+    account_id = "22222222-2222-2222-2222-222222222222"
+    campaign_id = "33333333-3333-3333-3333-333333333333"
+    adset_id = "44444444-4444-4444-4444-444444444444"
+    metric_date = date.today().isoformat()
+    fake = FakeClient(rows={
+        "clients": [{"id": ID}],
+        "meta_accounts": [{"id": account_id, "client_id": ID}],
+        "campaigns": [{"id": campaign_id, "meta_account_id": account_id}],
+        "adsets": [{"id": adset_id, "campaign_id": campaign_id}],
+        "ads": [{"id": "55555555-5555-5555-5555-555555555555", "adset_id": adset_id}],
+        "campaign_metrics": [{
+            "campaign_id": campaign_id, "metric_date": metric_date,
+            "spend": "12.50", "impressions": 1000, "clicks": 25,
+            "leads": 1, "conversations": 2,
+        }],
+    })
     override(fake)
 
     response = client.get("/api/v1/dashboard")
 
     assert response.status_code == 200
-    assert response.json()["metrics"] == {"spend": 12.5, "leads": 1, "cpl": 12.5}
+    assert response.json()["metrics"] == {
+        "spend": 12.5, "impressions": 1000, "clicks": 25, "leads": 1,
+        "conversations": 2, "cpl": 12.5, "ctr": 2.5, "cpc": 0.5, "cpm": 12.5,
+    }
+
+
+def test_dashboard_validates_period_filters() -> None:
+    override(FakeClient())
+    assert client.get("/api/v1/dashboard?days=8").status_code == 422
+    assert client.get("/api/v1/dashboard?date_from=2025-11-01").status_code == 422
+
+
+def test_metrics_reject_reversed_period() -> None:
+    override(FakeClient())
+    response = client.get(
+        "/api/v1/metrics/campaigns?date_from=2025-11-30&date_to=2025-11-01"
+    )
+    assert response.status_code == 422

@@ -23,6 +23,8 @@ def main() -> int:
     action.add_argument("--metrics", metavar="ACCOUNT_ID")
     parser.add_argument("--client-id", type=UUID)
     parser.add_argument("--date", type=date.fromisoformat)
+    parser.add_argument("--from-date", dest="date_from", type=date.fromisoformat)
+    parser.add_argument("--to-date", dest="date_to", type=date.fromisoformat)
     args = parser.parse_args()
     settings = get_settings()
 
@@ -70,9 +72,16 @@ def main() -> int:
                     args.client_id, args.sync_account
                 )
             else:
-                metric_date = args.date or date.today()
+                if args.date and (args.date_from or args.date_to):
+                    parser.error("Use --date ou --from-date/--to-date, não ambos.")
+                if (args.date_from is None) != (args.date_to is None):
+                    parser.error("--from-date e --to-date devem ser informados juntos.")
+                date_from = args.date_from or args.date or date.today()
+                date_to = args.date_to or date_from
+                if date_from > date_to:
+                    parser.error("--from-date não pode ser posterior a --to-date.")
                 safe = MetaSyncService(get_supabase_client(), meta).sync_daily_metrics(
-                    args.metrics, metric_date
+                    args.metrics, date_from, date_to
                 )
         print(json.dumps(safe, indent=2, ensure_ascii=False, default=str))
         return 0

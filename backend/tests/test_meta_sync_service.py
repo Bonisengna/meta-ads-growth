@@ -83,6 +83,9 @@ class FakeSupabase:
 
 
 class FakeMeta:
+    def __init__(self) -> None:
+        self.insight_ranges: list[tuple[str, str, str]] = []
+
     def list_ad_accounts(self):
         return [{"account_id": "123", "name": "Conta", "account_status": 1}]
 
@@ -95,7 +98,8 @@ class FakeMeta:
     def list_ads(self, _account_id: str):
         return []
 
-    def list_daily_insights(self, _account_id: str, level: str, _since: str, _until: str):
+    def list_daily_insights(self, _account_id: str, level: str, since: str, until: str):
+        self.insight_ranges.append((level, since, until))
         if level != "campaign":
             return []
         return [
@@ -193,3 +197,20 @@ def test_daily_metrics_are_upserted_by_entity_and_date() -> None:
     assert result == {"campaign": 1, "adset": 0, "ad": 0}
     assert database["campaign_metrics"][0]["campaign_id"] == "campaign-internal"
     assert database["campaign_metrics"][0]["metric_date"] == "2026-08-15"
+
+
+def test_daily_metrics_accept_historical_interval() -> None:
+    database = {
+        "campaigns": [{"id": "campaign-internal", "meta_campaign_id": "new-campaign"}],
+        "adsets": [], "ads": [], "campaign_metrics": [], "adset_metrics": [], "ad_metrics": [],
+    }
+    meta = FakeMeta()
+    service = MetaSyncService(FakeSupabase(database), meta)  # type: ignore[arg-type]
+
+    service.sync_daily_metrics("123", date(2025, 11, 1), date(2025, 11, 30))
+
+    assert meta.insight_ranges == [
+        ("campaign", "2025-11-01", "2025-11-30"),
+        ("adset", "2025-11-01", "2025-11-30"),
+        ("ad", "2025-11-01", "2025-11-30"),
+    ]
