@@ -24,7 +24,12 @@ supabase/
 ├── README.md
 └── migrations/
     ├── 0001_app_health.sql
-    └── 0002_harden_rls_auto_enable_permissions.sql
+    ├── 0002_harden_rls_auto_enable_permissions.sql
+    ├── 0003_realign_app_health_schema.sql
+    ├── 0004_core_meta_entities.sql
+    ├── 0005_daily_metrics.sql
+    ├── 0006_intelligence_actions.sql
+    └── 0007_sync_runs.sql
 ```
 
 ### 0001_app_health.sql
@@ -34,6 +39,13 @@ Cria a tabela técnica `public.app_health` para validar leitura e escrita antes 
 ### 0002_harden_rls_auto_enable_permissions.sql
 
 Remove permissão de execução pública da função `public.rls_auto_enable()` já existente no projeto, após alerta do Security Advisor.
+
+### 0007_sync_runs.sql
+
+Cria o protocolo da sincronização automática da Meta. Registra duração e
+resultado das execuções e usa um índice único parcial como trava para impedir
+duas rotas `RUNNING` simultâneas. A tabela mantém RLS habilitado, revoga acesso
+de `anon` e `authenticated` e concede somente ao backend `service_role`.
 
 ## Validação realizada no projeto real
 

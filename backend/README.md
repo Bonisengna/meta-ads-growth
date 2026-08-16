@@ -163,8 +163,25 @@ O comando continua aceitando `--date AAAA-MM-DD` para apenas um dia. A coleta
 usa `UPSERT`, portanto repetir o mesmo intervalo atualiza as linhas existentes
 em vez de duplicá-las.
 
+## Sincronização automática — Fase 6
+
+Após aplicar `supabase/migrations/0007_sync_runs.sql`, todas as contas ativas
+podem ser sincronizadas com um único comando:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\sync_meta_all.py
+```
+
+Por padrão, o comando atualiza entidades e reprocessa hoje e os dois dias
+anteriores. Ele registra a execução em `sync_runs`, repete somente erros
+temporários e impede duas sincronizações simultâneas. A instalação do
+agendamento diário no Windows está documentada em:
+
+- `../docs/fases/fase-6-automacao-sincronizacao.md`
+
 ## Documentação
 
 - Fase 1: `../docs/fases/fase-1-backend.md`
 - Fase 2: `../docs/fases/fase-2-supabase.md`
 - Fase 5: `../docs/fases/fase-5-historico-dashboard.md`
+- Fase 6: `../docs/fases/fase-6-automacao-sincronizacao.md`
