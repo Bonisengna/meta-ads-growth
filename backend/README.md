@@ -92,6 +92,29 @@ GET /api/v1/campaigns?meta_account_id={meta_account_id}&status=ACTIVE
 
 Sem o parâmetro `status`, tanto `ACTIVE` quanto `ARCHIVED` são retornados.
 
+## Meta Graph API — sincronização
+
+A integração usa a versão configurável da Graph API e mantém as credenciais
+somente no backend. O procedimento completo de criação do token, permissões,
+configuração local, diagnóstico e preparação de produção está em:
+
+- [Configuração da Meta Marketing API](docs/meta-marketing-api-setup.md)
+
+Resumo das variáveis esperadas:
+
+```env
+META_GRAPH_BASE_URL=https://graph.facebook.com
+META_GRAPH_VERSION=v25.0
+META_ACCESS_TOKEN=
+META_APP_ID=
+META_APP_SECRET=
+META_REQUEST_TIMEOUT_SECONDS=30
+```
+
+A sincronização não apaga campanhas, conjuntos ou anúncios. Entidades que não
+forem retornadas ou não estiverem ativas passam a `ARCHIVED`. Os testes usam
+transportes e respostas simuladas, portanto não consomem a API real.
+
 Para executar os testes:
 
 ```bash

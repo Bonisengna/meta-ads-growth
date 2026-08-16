@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     supabase_secret_key: SecretStr | None = None
     supabase_health_table: str = "app_health"
 
+    # Meta Graph API — segredos existem somente no ambiente/.env.
+    meta_graph_base_url: str = "https://graph.facebook.com"
+    meta_graph_version: str = "v25.0"
+    meta_access_token: SecretStr | None = None
+    meta_app_id: str | None = None
+    meta_app_secret: SecretStr | None = None
+    meta_request_timeout_seconds: float = 30.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -31,6 +39,14 @@ class Settings(BaseSettings):
         """Informa se URL e chave de servidor foram fornecidas."""
 
         return bool(self.supabase_url and self.supabase_secret_key)
+
+    @property
+    def meta_configured(self) -> bool:
+        return bool(self.meta_access_token)
+
+    @property
+    def meta_debug_configured(self) -> bool:
+        return bool(self.meta_access_token and self.meta_app_id and self.meta_app_secret)
 
 
 @lru_cache

@@ -128,3 +128,14 @@ def test_all_read_routes_are_documented() -> None:
     }
 
     assert expected <= paths.keys()
+
+
+def test_dashboard_serializes_money_as_json_number() -> None:
+    fake = FakeClient(rows={"campaign_metrics": [{"spend": "12.50", "leads": 1}]})
+    fake.counts = {table: 0 for table in ("clients", "meta_accounts", "campaigns", "adsets", "ads")}
+    override(fake)
+
+    response = client.get("/api/v1/dashboard")
+
+    assert response.status_code == 200
+    assert response.json()["metrics"] == {"spend": 12.5, "leads": 1, "cpl": 12.5}

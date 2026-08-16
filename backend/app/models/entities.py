@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 EntityStatus = Literal["ACTIVE", "ARCHIVED"]
@@ -58,9 +58,13 @@ class Page(ApiModel, Generic[T]):
 
 
 class DashboardMetrics(ApiModel):
-    spend: Decimal = Decimal("0")
+    spend: Decimal = Field(Decimal("0"), ge=0, max_digits=14, decimal_places=2, examples=[0.0])
     leads: int = 0
-    cpl: Decimal | None = None
+    cpl: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6, examples=[12.5])
+
+    @field_serializer("spend", "cpl", when_used="json")
+    def serialize_money(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
 
 
 class DashboardRead(ApiModel):
