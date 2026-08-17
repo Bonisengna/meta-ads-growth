@@ -43,6 +43,15 @@ ou token Meta. Apenas URL e chave publicável usam o prefixo `NEXT_PUBLIC_`.
 - limites mínimos de volume para reduzir conclusões precipitadas;
 - uma única resposta autenticada do dashboard, sem ampliar acesso no banco.
 
+## Evolução visual para produção
+
+- tema escuro inspirado em painéis operacionais;
+- contraste reforçado para métricas e tabelas;
+- cartões em camadas, navegação discreta e destaques por categoria;
+- preservação da identidade coral da DescompliADS;
+- imagem de referência usada apenas como direção visual, sem copiar marca ou
+  componentes de terceiros.
+
 ## Próximas entregas
 
 1. ranking de conjuntos e anúncios;
