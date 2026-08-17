@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     meta_sync_max_attempts: int = 3
     meta_sync_retry_delay_seconds: float = 2.0
     meta_sync_lock_minutes: int = 120
+    meta_sync_daily_time: str = "03:00"
+    meta_sync_run_on_start: bool = False
     meta_health_stale_hours: int = 26
 
     cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
