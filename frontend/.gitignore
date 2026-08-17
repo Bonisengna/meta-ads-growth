@@ -1,0 +1,7 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.local.example
+npm-debug.log*
+pnpm-debug.log*

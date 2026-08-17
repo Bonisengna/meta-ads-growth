@@ -17,3 +17,4 @@ Fases recentes:
 - [Fase 6 — Automação da sincronização](fases/fase-6-automacao-sincronizacao.md)
 - [Fase 7 — Observabilidade e falhas](fases/fase-7-observabilidade.md)
 - [Fase 8 — Segurança da API](fases/fase-8-seguranca-api.md)
+- [Fase 10 — Frontend e inteligência](fases/fase-10-frontend-inteligencia.md)

@@ -190,6 +190,8 @@ def test_dashboard_serializes_money_as_json_number() -> None:
 
 def test_dashboard_validates_period_filters() -> None:
     override(FakeClient())
+    assert client.get("/api/v1/dashboard?days=30").status_code == 200
+    assert client.get("/api/v1/dashboard?days=120").status_code == 200
     assert client.get("/api/v1/dashboard?days=8").status_code == 422
     assert client.get("/api/v1/dashboard?date_from=2025-11-01").status_code == 422
 

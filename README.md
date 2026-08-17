@@ -46,19 +46,13 @@ A automação n8n operacional é mantida separadamente na branch `n8n-operaciona
 
 ## Fase atual
 
-**Fase 2 — Supabase**
+**Fase 10 — Frontend e inteligência**
 
-Já existem:
+O backend, a sincronização Meta, a observabilidade e a proteção por usuário e
+cliente estão implementados. A primeira entrega da Fase 10 adiciona o frontend
+Next.js autenticado e um dashboard visual somente leitura.
 
-- cliente Supabase no FastAPI;
-- configuração segura por `.env`;
-- endpoint `/health/database`;
-- migration técnica `supabase/migrations/0001_app_health.sql`;
-- testes unitários de leitura/escrita;
-- smoke test manual;
-- GitHub Actions para executar os testes do backend.
-
-Documentação: `docs/fases/fase-2-supabase.md`.
+Documentação: `docs/fases/fase-10-frontend-inteligencia.md`.
 
 ## Branches
 

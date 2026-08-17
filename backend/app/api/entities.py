@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal
+from enum import IntEnum
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -30,6 +30,14 @@ from app.services.entity_services import (
 )
 
 router = APIRouter()
+
+
+class DashboardDays(IntEnum):
+    DAYS_7 = 7
+    DAYS_14 = 14
+    DAYS_30 = 30
+    DAYS_90 = 90
+    DAYS_120 = 120
 
 
 def not_found(exc: EntityNotFoundError) -> HTTPException:
@@ -222,7 +230,7 @@ def list_metrics(
 @router.get("/dashboard", response_model=DashboardRead, tags=["Dashboard"])
 def get_dashboard(
     client: SupabaseClient,
-    days: Literal[7, 14, 30, 90, 120] = 30,
+    days: DashboardDays = DashboardDays.DAYS_30,
     date_from: date | None = None,
     date_to: date | None = None,
     client_id: UUID | None = None,
@@ -231,7 +239,7 @@ def get_dashboard(
 ) -> dict[str, object]:
     try:
         return DashboardService(client).get_dashboard(
-            days=days,
+            days=int(days),
             date_from=date_from,
             date_to=date_to,
             client_id=client_id,
