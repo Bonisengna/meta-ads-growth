@@ -1,8 +1,10 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from supabase import Client
-from typing import Any
 
+from app.api.dependencies import authenticated_supabase_client_dependency
 from app.config.settings import get_settings
 from app.database.supabase import SupabaseNotConfiguredError, get_supabase_client
 from app.services.supabase_service import SupabaseService
@@ -43,6 +45,7 @@ def health_check() -> dict[str, str]:
 
 @router.get("/health/database", summary="Verifica a conexão com o Supabase")
 def database_health(
+    _authenticated: Client = Depends(authenticated_supabase_client_dependency),
     client: Client = Depends(supabase_client_dependency),
 ) -> dict[str, object]:
     """Readiness: valida uma leitura mínima na Data API do Supabase."""
@@ -66,6 +69,7 @@ def database_health(
     response_model=None,
 )
 def meta_health(
+    _authenticated: Client = Depends(authenticated_supabase_client_dependency),
     client: Client = Depends(supabase_client_dependency),
 ) -> Any:
     """Readiness operacional baseada nas execuções e contas sincronizadas."""

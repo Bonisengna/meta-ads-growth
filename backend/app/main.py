@@ -1,8 +1,10 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.entities import router as entities_router
 from app.api.health import router as health_router
 from app.config.settings import get_settings
+from app.middleware.rate_limit import RateLimitMiddleware
 
 settings = get_settings()
 
@@ -11,6 +13,19 @@ app = FastAPI(
     version=settings.app_version,
     debug=settings.debug,
     description="API backend do DescompliADS para métricas, análises e melhorias de campanhas Meta Ads.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+app.add_middleware(
+    RateLimitMiddleware,
+    requests=settings.rate_limit_requests,
+    window_seconds=settings.rate_limit_window_seconds,
 )
 
 # Health disponível na raiz e também sob o prefixo versionado da API.

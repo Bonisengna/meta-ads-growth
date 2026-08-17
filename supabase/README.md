@@ -31,7 +31,8 @@ supabase/
     ├── 0006_intelligence_actions.sql
     ├── 0007_sync_runs.sql
     ├── 0008_integration_alerts.sql
-    └── 0009_integration_alerts_account_index.sql
+    ├── 0009_integration_alerts_account_index.sql
+    └── 0010_user_client_access_rls.sql
 ```
 
 ### 0001_app_health.sql
@@ -53,6 +54,12 @@ de `anon` e `authenticated` e concede somente ao backend `service_role`.
 
 Cria alertas operacionais de token e integração com RLS, acesso exclusivo do
 backend e unicidade para impedir alertas abertos duplicados.
+
+### 0010_user_client_access_rls.sql
+
+Cria o vínculo entre usuários do Supabase Auth e clientes do SaaS. Concede
+leitura a `authenticated` somente sob políticas RLS que percorrem a hierarquia
+cliente → conta → campanha → conjunto → anúncio → métricas.
 
 ## Validação realizada no projeto real
 

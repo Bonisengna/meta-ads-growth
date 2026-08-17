@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.database.supabase import SupabaseNotConfiguredError
+from app.api.dependencies import authenticated_supabase_client_dependency
+from app.api.health import supabase_client_dependency
 from app.main import app
 
 client = TestClient(app)
@@ -37,6 +39,7 @@ def test_database_health_returns_503_when_supabase_is_not_configured(monkeypatch
         raise SupabaseNotConfiguredError("não configurado")
 
     monkeypatch.setattr("app.api.health.get_supabase_client", fake_get_client)
+    app.dependency_overrides[authenticated_supabase_client_dependency] = lambda: object()
 
     response = client.get("/health/database")
 
@@ -44,3 +47,9 @@ def test_database_health_returns_503_when_supabase_is_not_configured(monkeypatch
     detail = response.json()["detail"]
     assert detail["status"] == "unconfigured"
     assert detail["service"] == "supabase"
+    app.dependency_overrides.clear()
+
+
+def test_operational_health_requires_authentication() -> None:
+    assert client.get("/health/database").status_code == 401
+    assert client.get("/health/meta").status_code == 401

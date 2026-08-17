@@ -16,3 +16,4 @@ Fases recentes:
 - [Fase 5 — Coleta histórica e dashboard](fases/fase-5-historico-dashboard.md)
 - [Fase 6 — Automação da sincronização](fases/fase-6-automacao-sincronizacao.md)
 - [Fase 7 — Observabilidade e falhas](fases/fase-7-observabilidade.md)
+- [Fase 8 — Segurança da API](fases/fase-8-seguranca-api.md)

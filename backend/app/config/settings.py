@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # Supabase — valores reais devem existir apenas no ambiente/.env.
     supabase_url: str | None = None
     supabase_secret_key: SecretStr | None = None
+    supabase_publishable_key: str | None = None
     supabase_health_table: str = "app_health"
 
     # Meta Graph API — segredos existem somente no ambiente/.env.
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
     meta_sync_retry_delay_seconds: float = 2.0
     meta_sync_lock_minutes: int = 120
     meta_health_stale_hours: int = 26
+
+    cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    rate_limit_requests: int = 60
+    rate_limit_window_seconds: int = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -52,6 +57,19 @@ class Settings(BaseSettings):
     @property
     def meta_debug_configured(self) -> bool:
         return bool(self.meta_access_token and self.meta_app_id and self.meta_app_secret)
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.environment.lower() == "production":
+            if self.debug:
+                raise ValueError("DEBUG deve ser false em produção")
+            if "*" in self.cors_origins:
+                raise ValueError("CORS não pode usar origem curinga em produção")
+        return self
 
 
 @lru_cache

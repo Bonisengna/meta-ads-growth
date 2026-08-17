@@ -192,6 +192,27 @@ O endpoint informa a última execução, contas atrasadas, alertas abertos e o
 estado do token. O limite padrão de atraso é 26 horas e pode ser configurado
 com `META_HEALTH_STALE_HOURS`.
 
+## Segurança — Fase 8
+
+Todos os endpoints de dados exigem `Authorization: Bearer <token>` emitido pelo
+Supabase Auth. As tabelas aplicam RLS por meio de `user_client_access`, evitando
+acesso cruzado entre clientes. Apenas `/`, `/health`, `/api/v1/health` e a
+documentação permanecem públicos.
+
+Também foram adicionados CORS restrito, limite inicial por IP e validações que
+impedem `DEBUG=true` ou origem `*` em produção. Configuração completa:
+
+- `../docs/fases/fase-8-seguranca-api.md`
+
+Com a API local em execução, valide o login sem colocar a senha no comando:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_auth.py --email seu-email@exemplo.com
+```
+
+O script solicita a senha de forma oculta, não imprime o token e confirma que
+uma chamada anônima recebe `401` enquanto o usuário vinculado recebe `200`.
+
 ## Documentação
 
 - Fase 1: `../docs/fases/fase-1-backend.md`
@@ -199,3 +220,4 @@ com `META_HEALTH_STALE_HOURS`.
 - Fase 5: `../docs/fases/fase-5-historico-dashboard.md`
 - Fase 6: `../docs/fases/fase-6-automacao-sincronizacao.md`
 - Fase 7: `../docs/fases/fase-7-observabilidade.md`
+- Fase 8: `../docs/fases/fase-8-seguranca-api.md`
