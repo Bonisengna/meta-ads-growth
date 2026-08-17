@@ -179,9 +179,23 @@ agendamento diário no Windows está documentada em:
 
 - `../docs/fases/fase-6-automacao-sincronizacao.md`
 
+## Observabilidade Meta — Fase 7
+
+O estado operacional pode ser consultado sem chamar a Graph API:
+
+```http
+GET /health/meta
+GET /api/v1/health/meta
+```
+
+O endpoint informa a última execução, contas atrasadas, alertas abertos e o
+estado do token. O limite padrão de atraso é 26 horas e pode ser configurado
+com `META_HEALTH_STALE_HOURS`.
+
 ## Documentação
 
 - Fase 1: `../docs/fases/fase-1-backend.md`
 - Fase 2: `../docs/fases/fase-2-supabase.md`
 - Fase 5: `../docs/fases/fase-5-historico-dashboard.md`
 - Fase 6: `../docs/fases/fase-6-automacao-sincronizacao.md`
+- Fase 7: `../docs/fases/fase-7-observabilidade.md`

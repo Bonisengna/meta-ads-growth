@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     meta_sync_max_attempts: int = 3
     meta_sync_retry_delay_seconds: float = 2.0
     meta_sync_lock_minutes: int = 120
+    meta_health_stale_hours: int = 26
 
     model_config = SettingsConfigDict(
         env_file=".env",

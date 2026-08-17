@@ -35,7 +35,7 @@ class MetaSyncService:
                 f"Conta de anúncios {normalized_id} não acessível para este token."
             )
 
-        account = self._upsert_one(
+        account, account_created = self._upsert_one(
             "meta_accounts",
             {
                 "client_id": str(client_id),
@@ -44,24 +44,35 @@ class MetaSyncService:
                 "currency": remote_account.get("currency"),
                 "timezone": remote_account.get("timezone_name"),
                 "status": account_status(remote_account.get("account_status")),
-                "last_synced_at": now_iso(),
                 "updated_at": now_iso(),
             },
             "meta_account_id",
         )
 
         campaigns = self.meta.list_campaigns(normalized_id)
-        campaign_ids = self._sync_campaigns(account["id"], campaigns)
+        campaign_ids, campaign_changes = self._sync_campaigns(account["id"], campaigns)
         adsets = self.meta.list_adsets(normalized_id)
-        adset_ids = self._sync_adsets(campaign_ids, adsets)
+        adset_ids, adset_changes = self._sync_adsets(campaign_ids, adsets)
         ads = self.meta.list_ads(normalized_id)
-        self._sync_ads(adset_ids, ads)
+        ad_changes = self._sync_ads(adset_ids, ads)
+        (
+            self.supabase.table("meta_accounts")
+            .update({"last_synced_at": now_iso(), "updated_at": now_iso()})
+            .eq("id", account["id"])
+            .execute()
+        )
 
         return {
             "meta_accounts": 1,
             "campaigns": len(campaigns),
             "adsets": len(adsets),
             "ads": len(ads),
+            "changes": {
+                "meta_accounts": change_stats(account_created),
+                "campaigns": campaign_changes,
+                "adsets": adset_changes,
+                "ads": ad_changes,
+            },
         }
 
     def sync_daily_metrics(
@@ -94,10 +105,11 @@ class MetaSyncService:
 
     def _sync_campaigns(
         self, meta_account_id: str, remote_rows: list[dict[str, Any]]
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], dict[str, int]]:
         result: dict[str, str] = {}
+        changes = change_stats()
         for row in remote_rows:
-            saved = self._upsert_one(
+            saved, created = self._upsert_one(
                 "campaigns",
                 {
                     "meta_account_id": meta_account_id,
@@ -111,22 +123,24 @@ class MetaSyncService:
                 },
                 "meta_campaign_id",
             )
+            changes["imported" if created else "updated"] += 1
             result[row["id"]] = saved["id"]
-        self._archive_missing(
+        changes["archived"] = self._archive_missing(
             "campaigns", "meta_account_id", meta_account_id, "meta_campaign_id", set(result)
         )
-        return result
+        return result, changes
 
     def _sync_adsets(
         self, campaign_ids: dict[str, str], remote_rows: list[dict[str, Any]]
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], dict[str, int]]:
         result: dict[str, str] = {}
+        changes = change_stats()
         grouped: dict[str, set[str]] = {value: set() for value in campaign_ids.values()}
         for row in remote_rows:
             campaign_id = campaign_ids.get(str(row.get("campaign_id")))
             if not campaign_id:
                 continue
-            saved = self._upsert_one(
+            saved, created = self._upsert_one(
                 "adsets",
                 {
                     "campaign_id": campaign_id,
@@ -143,20 +157,26 @@ class MetaSyncService:
                 },
                 "meta_adset_id",
             )
+            changes["imported" if created else "updated"] += 1
             result[row["id"]] = saved["id"]
             grouped[campaign_id].add(row["id"])
         for campaign_id, present in grouped.items():
-            self._archive_missing("adsets", "campaign_id", campaign_id, "meta_adset_id", present)
-        return result
+            changes["archived"] += self._archive_missing(
+                "adsets", "campaign_id", campaign_id, "meta_adset_id", present
+            )
+        return result, changes
 
-    def _sync_ads(self, adset_ids: dict[str, str], remote_rows: list[dict[str, Any]]) -> None:
+    def _sync_ads(
+        self, adset_ids: dict[str, str], remote_rows: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        changes = change_stats()
         grouped: dict[str, set[str]] = {value: set() for value in adset_ids.values()}
         for row in remote_rows:
             adset_id = adset_ids.get(str(row.get("adset_id")))
             if not adset_id:
                 continue
             creative = row.get("creative") or {}
-            self._upsert_one(
+            _, created = self._upsert_one(
                 "ads",
                 {
                     "adset_id": adset_id,
@@ -170,13 +190,25 @@ class MetaSyncService:
                 },
                 "meta_ad_id",
             )
+            changes["imported" if created else "updated"] += 1
             grouped[adset_id].add(row["id"])
         for adset_id, present in grouped.items():
-            self._archive_missing("ads", "adset_id", adset_id, "meta_ad_id", present)
+            changes["archived"] += self._archive_missing(
+                "ads", "adset_id", adset_id, "meta_ad_id", present
+            )
+        return changes
 
     def _upsert_one(
         self, table: str, payload: dict[str, Any], conflict_column: str
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], bool]:
+        existing = (
+            self.supabase.table(table)
+            .select("id")
+            .eq(conflict_column, str(payload[conflict_column]))
+            .limit(1)
+            .execute()
+        )
+        created = not bool(existing.data)
         response = (
             self.supabase.table(table)
             .upsert(payload, on_conflict=conflict_column)
@@ -186,7 +218,7 @@ class MetaSyncService:
         rows = response.data or []
         if not rows:
             raise RuntimeError(f"Supabase não retornou o registro de {table} após UPSERT.")
-        return rows[0]
+        return rows[0], created
 
     def _archive_missing(
         self,
@@ -195,7 +227,8 @@ class MetaSyncService:
         parent_id: str,
         external_column: str,
         present_ids: set[str],
-    ) -> None:
+    ) -> int:
+        archived = 0
         response = (
             self.supabase.table(table)
             .select(f"id,{external_column},status")
@@ -210,6 +243,8 @@ class MetaSyncService:
                     .eq("id", row["id"])
                     .execute()
                 )
+                archived += 1
+        return archived
 
     def _internal_id_map(self, table: str, meta_column: str) -> dict[str, str]:
         response = self.supabase.table(table).select(f"id,{meta_column}").execute()
@@ -218,6 +253,13 @@ class MetaSyncService:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def change_stats(created: bool | None = None) -> dict[str, int]:
+    result = {"imported": 0, "updated": 0, "archived": 0}
+    if created is not None:
+        result["imported" if created else "updated"] = 1
+    return result
 
 
 def entity_status(effective_status: Any) -> str:

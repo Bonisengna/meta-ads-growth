@@ -56,6 +56,7 @@ class MetaSyncRunner:
             successful = sum(result["status"] == "SUCCESS" for result in results)
             failed = len(results) - successful
             status = "SUCCESS" if failed == 0 else "FAILED" if successful == 0 else "PARTIAL"
+            entity_changes = aggregate_entity_changes(results)
             summary = {
                 "run_id": run["id"],
                 "status": status,
@@ -63,8 +64,10 @@ class MetaSyncRunner:
                 "accounts_total": len(accounts),
                 "accounts_success": successful,
                 "accounts_failed": failed,
+                "entity_changes": entity_changes,
                 "accounts": results,
             }
+            self._update_token_alert(results, successful > 0)
             self._finish(run["id"], started_at, summary)
             return summary
         except Exception as exc:
@@ -119,13 +122,58 @@ class MetaSyncRunner:
                 "metrics": metrics,
             }
         except Exception as exc:
-            return {
+            result = {
                 "meta_account_id": account_id,
                 "name": account.get("name"),
                 "status": "FAILED",
                 "period": {"date_from": since.isoformat(), "date_to": today.isoformat()},
                 "error": safe_error(exc),
             }
+            if isinstance(exc, MetaGraphError):
+                result["error_code"] = exc.code
+                result["http_status"] = exc.status_code
+            return result
+
+    def _update_token_alert(self, results: list[dict[str, Any]], has_success: bool) -> None:
+        token_errors = [result for result in results if result.get("error_code") == 190]
+        query = (
+            self.supabase.table("integration_alerts")
+            .select("id")
+            .eq("alert_type", "TOKEN_EXPIRED")
+            .eq("scope_key", "GLOBAL")
+            .eq("status", "OPEN")
+            .limit(1)
+            .execute()
+        )
+        open_rows = query.data or []
+        if token_errors and not open_rows:
+            (
+                self.supabase.table("integration_alerts")
+                .insert(
+                    {
+                        "scope_key": "GLOBAL",
+                        "alert_type": "TOKEN_EXPIRED",
+                        "severity": "CRITICAL",
+                        "title": "Token da Meta expirado ou inválido",
+                        "message": "A Meta rejeitou a credencial. Gere ou renove o token do backend.",
+                        "status": "OPEN",
+                    }
+                )
+                .execute()
+            )
+        elif has_success and not token_errors and open_rows:
+            (
+                self.supabase.table("integration_alerts")
+                .update(
+                    {
+                        "status": "RESOLVED",
+                        "resolved_at": self.now().isoformat(),
+                        "updated_at": self.now().isoformat(),
+                    }
+                )
+                .eq("id", open_rows[0]["id"])
+                .execute()
+            )
 
     def _acquire(self, lookback_days: int) -> dict[str, Any]:
         now = self.now()
@@ -230,3 +278,18 @@ def safe_error(exc: Exception) -> str:
     message = re.sub(r"(?i)(access[_ -]?token|app[_ -]?secret)=?[^\s&,]+", r"\1=[REDACTED]", message)
     message = re.sub(r"(?i)bearer\s+[A-Za-z0-9._-]+", "Bearer [REDACTED]", message)
     return message[:2000]
+
+
+def aggregate_entity_changes(results: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    totals = {
+        entity: {"imported": 0, "updated": 0, "archived": 0}
+        for entity in ("meta_accounts", "campaigns", "adsets", "ads")
+    }
+    for result in results:
+        changes = (result.get("entities") or {}).get("changes") or {}
+        for entity, values in changes.items():
+            if entity not in totals:
+                continue
+            for action in totals[entity]:
+                totals[entity][action] += int(values.get(action, 0))
+    return totals

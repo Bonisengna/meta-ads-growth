@@ -42,6 +42,9 @@ class FakeQuery:
         self.filters.append((column, value))
         return self
 
+    def limit(self, _limit: int):
+        return self
+
     def execute(self):
         rows = self.database.setdefault(self.table, [])
         if self.operation == "upsert":
@@ -175,7 +178,14 @@ def test_sync_upserts_current_entities_and_archives_missing_ones() -> None:
         __import__("uuid").UUID("11111111-1111-1111-1111-111111111111"), "act_123"
     )
 
-    assert result == {"meta_accounts": 1, "campaigns": 1, "adsets": 0, "ads": 0}
+    assert result["meta_accounts"] == 1
+    assert result["campaigns"] == 1
+    assert result["changes"] == {
+        "meta_accounts": {"imported": 0, "updated": 1, "archived": 0},
+        "campaigns": {"imported": 1, "updated": 0, "archived": 1},
+        "adsets": {"imported": 0, "updated": 0, "archived": 0},
+        "ads": {"imported": 0, "updated": 0, "archived": 0},
+    }
     campaigns = database["campaigns"]
     assert next(row for row in campaigns if row["meta_campaign_id"] == "old-campaign")["status"] == "ARCHIVED"
     assert next(row for row in campaigns if row["meta_campaign_id"] == "new-campaign")["status"] == "ACTIVE"

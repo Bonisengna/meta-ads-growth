@@ -29,7 +29,9 @@ supabase/
     ├── 0004_core_meta_entities.sql
     ├── 0005_daily_metrics.sql
     ├── 0006_intelligence_actions.sql
-    └── 0007_sync_runs.sql
+    ├── 0007_sync_runs.sql
+    ├── 0008_integration_alerts.sql
+    └── 0009_integration_alerts_account_index.sql
 ```
 
 ### 0001_app_health.sql
@@ -46,6 +48,11 @@ Cria o protocolo da sincronização automática da Meta. Registra duração e
 resultado das execuções e usa um índice único parcial como trava para impedir
 duas rotas `RUNNING` simultâneas. A tabela mantém RLS habilitado, revoga acesso
 de `anon` e `authenticated` e concede somente ao backend `service_role`.
+
+### 0008_integration_alerts.sql
+
+Cria alertas operacionais de token e integração com RLS, acesso exclusivo do
+backend e unicidade para impedir alertas abertos duplicados.
 
 ## Validação realizada no projeto real
 

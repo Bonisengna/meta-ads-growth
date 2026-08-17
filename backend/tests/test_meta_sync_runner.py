@@ -97,7 +97,17 @@ class FakeSyncService:
         self.calls.append(("entities", client_id, account_id))
         if account_id == "failed":
             raise MetaGraphError("requisição inválida", status_code=400)
-        return {"meta_accounts": 1, "campaigns": 2, "adsets": 3, "ads": 4}
+        if account_id == "expired":
+            raise MetaGraphError("token inválido", code=190, status_code=400)
+        return {
+            "meta_accounts": 1, "campaigns": 2, "adsets": 3, "ads": 4,
+            "changes": {
+                "meta_accounts": {"imported": 0, "updated": 1, "archived": 0},
+                "campaigns": {"imported": 1, "updated": 1, "archived": 0},
+                "adsets": {"imported": 0, "updated": 3, "archived": 0},
+                "ads": {"imported": 0, "updated": 4, "archived": 0},
+            },
+        }
 
     def sync_daily_metrics(self, account_id, since, until):
         self.calls.append(("metrics", account_id, since, until))
@@ -126,6 +136,9 @@ def test_runner_syncs_only_active_accounts_and_reprocesses_today(monkeypatch) ->
 
     assert result["status"] == "SUCCESS"
     assert result["accounts_total"] == 1
+    assert result["entity_changes"]["campaigns"] == {
+        "imported": 1, "updated": 1, "archived": 0
+    }
     assert FakeSyncService.calls == [
         ("entities", "c1", "123"),
         ("metrics", "123", date(2026, 8, 14), date(2026, 8, 16)),
@@ -163,6 +176,22 @@ def test_running_lock_prevents_concurrent_sync() -> None:
 
     with pytest.raises(SyncAlreadyRunningError):
         runner.run(3)
+
+
+def test_runner_creates_token_expired_alert(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    database = make_database()
+    database["meta_accounts"][0]["meta_account_id"] = "expired"
+
+    result = MetaSyncRunner(  # type: ignore[arg-type]
+        FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None
+    ).run(3)
+
+    assert result["status"] == "FAILED"
+    alert = database["integration_alerts"][0]
+    assert alert["alert_type"] == "TOKEN_EXPIRED"
+    assert alert["status"] == "OPEN"
 
 
 def test_retry_uses_exponential_delay_for_transient_errors() -> None:
