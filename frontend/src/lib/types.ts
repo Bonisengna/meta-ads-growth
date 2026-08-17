@@ -9,4 +9,7 @@ export type Dashboard = {
   period: { date_from: string; date_to: string; days: number };
   previous_period: { date_from: string; date_to: string; days: number };
   metrics: Metrics; previous_metrics: Metrics; change_percent: Record<keyof Metrics, number | null>;
+  daily_series: Array<{ metric_date: string; spend: number; impressions: number; clicks: number; leads: number; conversations: number }>;
+  campaign_ranking: Array<{ campaign_id: string; name: string; status: EntityStatus; spend: number; impressions: number; clicks: number; leads: number; conversations: number; cpl: number | null; ctr: number | null; cpc: number | null; cost_per_conversation: number | null }>;
+  insights: Array<{ code: string; severity: "INFO" | "WARNING" | "OPPORTUNITY"; title: string; message: string }>;
 };

@@ -237,6 +237,9 @@ class DashboardService:
         scope = self._scope(client_id, meta_account_id, campaign_id)
         current_metrics = self._aggregate(current[0], current[1], scope["campaign_ids"])
         previous_metrics = self._aggregate(previous[0], previous[1], scope["campaign_ids"])
+        analytics = self._analytics(
+            current[0], current[1], scope["campaign_ids"], scope["campaign_rows"]
+        )
 
         return {
             "clients": scope["clients"],
@@ -249,6 +252,9 @@ class DashboardService:
             "metrics": current_metrics,
             "previous_metrics": previous_metrics,
             "change_percent": compare_metrics(current_metrics, previous_metrics),
+            "daily_series": analytics["daily_series"],
+            "campaign_ranking": analytics["campaign_ranking"],
+            "insights": build_insights(current_metrics, previous_metrics),
         }
 
     def _scope(
@@ -270,7 +276,9 @@ class DashboardService:
         account_rows = account_query.execute().data or []
         account_ids = row_ids(account_rows)
 
-        campaign_query = self.client.table("campaigns").select("id,meta_account_id")
+        campaign_query = self.client.table("campaigns").select(
+            "id,meta_account_id,name,status"
+        )
         campaign_rows: list[dict[str, object]] = []
         if account_ids or client_id or meta_account_id:
             if not account_ids:
@@ -325,6 +333,7 @@ class DashboardService:
             "clients": len(client_ids),
             "account_ids": account_ids,
             "campaign_ids": campaign_ids,
+            "campaign_rows": campaign_rows,
             "adset_ids": adset_ids,
             "ads": ads,
         }
@@ -353,6 +362,72 @@ class DashboardService:
                 break
             offset += batch_size
         return aggregate_metrics(rows)
+
+    def _analytics(
+        self,
+        date_from: date,
+        date_to: date,
+        campaign_ids: list[str],
+        campaign_rows: list[dict[str, object]],
+    ) -> dict[str, object]:
+        rows: list[dict[str, object]] = []
+        if campaign_ids:
+            offset = 0
+            while True:
+                response = (
+                    self.client.table("campaign_metrics")
+                    .select(
+                        "campaign_id,metric_date,spend,impressions,clicks,leads,conversations"
+                    )
+                    .gte("metric_date", date_from.isoformat())
+                    .lte("metric_date", date_to.isoformat())
+                    .in_("campaign_id", campaign_ids)
+                    .range(offset, offset + 999)
+                    .execute()
+                )
+                batch = response.data or []
+                rows.extend(batch)
+                if len(batch) < 1000:
+                    break
+                offset += 1000
+
+        by_date: dict[str, list[dict[str, object]]] = {}
+        by_campaign: dict[str, list[dict[str, object]]] = {}
+        for row in rows:
+            by_date.setdefault(str(row["metric_date"]), []).append(row)
+            by_campaign.setdefault(str(row["campaign_id"]), []).append(row)
+
+        daily_series = []
+        current_date = date_from
+        while current_date <= date_to:
+            metrics = aggregate_metrics(by_date.get(current_date.isoformat(), []))
+            daily_series.append(
+                {
+                    "metric_date": current_date,
+                    **{key: metrics[key] for key in ("spend", "impressions", "clicks", "leads", "conversations")},
+                }
+            )
+            current_date += timedelta(days=1)
+
+        campaigns = {str(row["id"]): row for row in campaign_rows}
+        ranking = []
+        for campaign_id, metric_rows in by_campaign.items():
+            metrics = aggregate_metrics(metric_rows)
+            campaign = campaigns.get(campaign_id, {})
+            ranking.append(
+                {
+                    "campaign_id": campaign_id,
+                    "name": campaign.get("name") or "Campanha sem nome",
+                    "status": campaign.get("status") or "ARCHIVED",
+                    **metrics,
+                    "cost_per_conversation": safe_divide(
+                        Decimal(str(metrics["spend"])),
+                        Decimal(str(metrics["conversations"])),
+                    ),
+                }
+            )
+        ranking.sort(key=lambda row: Decimal(str(row["spend"])), reverse=True)
+        return {"daily_series": daily_series, "campaign_ranking": ranking}
 
 
 def page_range(page: int, page_size: int) -> tuple[int, int]:
@@ -433,6 +508,72 @@ def compare_metrics(
             "cpm",
         )
     }
+
+
+def build_insights(
+    current: dict[str, object], previous: dict[str, object]
+) -> list[dict[str, str]]:
+    spend = Decimal(str(current.get("spend") or 0))
+    impressions = int(current.get("impressions") or 0)
+    conversions = int(current.get("leads") or 0) + int(current.get("conversations") or 0)
+    ctr = current.get("ctr")
+    insights: list[dict[str, str]] = []
+
+    if spend == 0:
+        insights.append(
+            {
+                "code": "NO_DELIVERY",
+                "severity": "INFO",
+                "title": "Sem investimento no período",
+                "message": "Não há gasto registrado para produzir um diagnóstico de desempenho.",
+            }
+        )
+        return insights
+    if spend >= Decimal("20") and conversions == 0:
+        insights.append(
+            {
+                "code": "SPEND_WITHOUT_CONVERSION",
+                "severity": "WARNING",
+                "title": "Investimento sem conversões",
+                "message": "Há pelo menos R$ 20 de investimento e nenhum lead ou conversa registrado.",
+            }
+        )
+    if impressions >= 1000 and ctr is not None and Decimal(str(ctr)) < Decimal("1"):
+        insights.append(
+            {
+                "code": "LOW_CTR",
+                "severity": "WARNING",
+                "title": "CTR abaixo de 1%",
+                "message": "Com pelo menos mil impressões, a taxa de cliques indica atenção para criativo e mensagem.",
+            }
+        )
+
+    current_conversations = int(current.get("conversations") or 0)
+    previous_conversations = int(previous.get("conversations") or 0)
+    if current_conversations >= 5 and previous_conversations >= 5:
+        current_cost = safe_divide(spend, Decimal(current_conversations))
+        previous_cost = safe_divide(
+            Decimal(str(previous.get("spend") or 0)), Decimal(previous_conversations)
+        )
+        if current_cost is not None and previous_cost is not None and current_cost <= previous_cost * Decimal("0.85"):
+            insights.append(
+                {
+                    "code": "CONVERSATION_COST_IMPROVED",
+                    "severity": "OPPORTUNITY",
+                    "title": "Custo por conversa melhorou",
+                    "message": "O custo por conversa caiu pelo menos 15% com volume mínimo comparável.",
+                }
+            )
+    if not insights:
+        insights.append(
+            {
+                "code": "NO_STRONG_SIGNAL",
+                "severity": "INFO",
+                "title": "Sem sinal forte no período",
+                "message": "Os limites mínimos das regras não foram atingidos; continue acompanhando a coleta.",
+            }
+        )
+    return insights
 
 
 def percent_change(current: object, previous: object) -> Decimal | None:

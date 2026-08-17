@@ -135,6 +135,48 @@ class DashboardRead(ApiModel):
     metrics: DashboardMetrics
     previous_metrics: DashboardMetrics
     change_percent: MetricsComparison
+    daily_series: list["DailyMetricPoint"]
+    campaign_ranking: list["CampaignPerformance"]
+    insights: list["PerformanceInsight"]
+
+
+class DailyMetricPoint(ApiModel):
+    metric_date: date
+    spend: Decimal
+    impressions: int
+    clicks: int
+    leads: int
+    conversations: int
+
+    @field_serializer("spend", when_used="json")
+    def serialize_spend(self, value: Decimal) -> float:
+        return float(value)
+
+
+class CampaignPerformance(ApiModel):
+    campaign_id: UUID
+    name: str
+    status: EntityStatus
+    spend: Decimal
+    impressions: int
+    clicks: int
+    leads: int
+    conversations: int
+    cpl: Decimal | None = None
+    ctr: Decimal | None = None
+    cpc: Decimal | None = None
+    cost_per_conversation: Decimal | None = None
+
+    @field_serializer("spend", "cpl", "ctr", "cpc", "cost_per_conversation", when_used="json")
+    def serialize_decimal(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class PerformanceInsight(ApiModel):
+    code: str
+    severity: Literal["INFO", "WARNING", "OPPORTUNITY"]
+    title: str
+    message: str
 
 
 class BaseMetricRead(ApiModel):

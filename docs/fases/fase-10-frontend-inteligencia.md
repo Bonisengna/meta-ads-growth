@@ -34,14 +34,21 @@ ou token Meta. Apenas URL e chave publicável usam o prefixo `NEXT_PUBLIC_`.
 - estado de erro quando a FastAPI estiver indisponível;
 - nenhuma alteração automática na Meta.
 
+## Segunda entrega
+
+- evolução diária do investimento;
+- ranking agregado de campanhas com entrega;
+- custo por conversa por campanha;
+- diagnósticos determinísticos com código e severidade;
+- limites mínimos de volume para reduzir conclusões precipitadas;
+- uma única resposta autenticada do dashboard, sem ampliar acesso no banco.
+
 ## Próximas entregas
 
-1. métricas por campanha e série temporal;
-2. ranking de campanhas, conjuntos e anúncios;
-3. regras determinísticas de diagnóstico;
-4. recomendações explicáveis e priorizadas;
-5. registro de aceite, rejeição e resultado;
-6. IA para explicar e resumir, nunca para alterar campanhas sem aprovação.
+1. ranking de conjuntos e anúncios;
+2. recomendações explicáveis e priorizadas;
+3. registro de aceite, rejeição e resultado;
+4. IA para explicar e resumir, nunca para alterar campanhas sem aprovação.
 
 ## Analogia
 

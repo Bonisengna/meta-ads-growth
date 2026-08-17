@@ -11,6 +11,7 @@ from app.services.entity_services import (
     EntityNotFoundError,
     MetricService,
     aggregate_metrics,
+    build_insights,
     compare_metrics,
     resolve_periods,
 )
@@ -127,6 +128,23 @@ def test_comparison_returns_percent_and_null_for_zero_baseline() -> None:
     change = compare_metrics(current, previous)
     assert change["spend"] == Decimal("50.00")
     assert change["leads"] is None
+
+
+def test_insights_warn_when_spend_has_no_conversion() -> None:
+    current = aggregate_metrics([
+        {"spend": 30, "impressions": 1500, "clicks": 10, "leads": 0, "conversations": 0}
+    ])
+    codes = {item["code"] for item in build_insights(current, aggregate_metrics([]))}
+    assert codes == {"SPEND_WITHOUT_CONVERSION", "LOW_CTR"}
+
+
+def test_insights_do_not_claim_low_ctr_without_minimum_volume() -> None:
+    current = aggregate_metrics([
+        {"spend": 5, "impressions": 100, "clicks": 0, "leads": 0, "conversations": 0}
+    ])
+    assert [item["code"] for item in build_insights(current, aggregate_metrics([]))] == [
+        "NO_STRONG_SIGNAL"
+    ]
 
 
 def test_metric_service_filters_period_without_status_filter() -> None:
