@@ -149,6 +149,35 @@ class DashboardRead(ApiModel):
     ad_ranking: list["EntityPerformance"]
     insights: list["PerformanceInsight"]
     recommendations: list["RecommendationRead"]
+    breakdowns: "BreakdownAnalytics"
+
+
+class BreakdownPoint(ApiModel):
+    value: str
+    spend: Decimal
+    impressions: int
+    reach: int
+    link_clicks: int
+    leads: int
+    conversations: int
+    cpa: Decimal | None = None
+    conversion_rate: Decimal | None = None
+    ctr: Decimal | None = None
+    cpm: Decimal | None = None
+
+    @field_serializer("spend", "cpa", "conversion_rate", "ctr", "cpm", when_used="json")
+    def serialize_decimal(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class BreakdownAnalytics(ApiModel):
+    age: list[BreakdownPoint] = Field(default_factory=list)
+    gender: list[BreakdownPoint] = Field(default_factory=list)
+    platform: list[BreakdownPoint] = Field(default_factory=list)
+    placement: list[BreakdownPoint] = Field(default_factory=list)
+    device: list[BreakdownPoint] = Field(default_factory=list)
+    region: list[BreakdownPoint] = Field(default_factory=list)
+    hour: list[BreakdownPoint] = Field(default_factory=list)
 
 
 class DailyMetricPoint(ApiModel):

@@ -46,6 +46,20 @@ def test_insights_serializes_time_range_and_level() -> None:
     assert json.loads(captured[0].url.params["time_range"])["since"] == "2026-08-15"
 
 
+def test_breakdown_insights_send_one_supported_dimension() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    with MetaGraphClient("token", transport=httpx.MockTransport(handler)) as client:
+        client.list_breakdown_insights("123", "age", "2026-08-01", "2026-08-15")
+
+    assert captured[0].url.params["breakdowns"] == "age"
+    assert captured[0].url.params["level"] == "campaign"
+
+
 def test_http_failure_becomes_safe_meta_error() -> None:
     transport = httpx.MockTransport(lambda _request: httpx.Response(401, json={"error": {}}))
 

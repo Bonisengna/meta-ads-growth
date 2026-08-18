@@ -240,6 +240,9 @@ class DashboardService:
         analytics = self._analytics(
             current[0], current[1], scope
         )
+        breakdowns = self._breakdown_analytics(
+            current[0], current[1], scope["campaign_ids"]
+        )
 
         recommendations = build_recommendations(
             analytics["adset_ranking"], analytics["ad_ranking"]
@@ -265,7 +268,68 @@ class DashboardService:
             "ad_ranking": analytics["ad_ranking"],
             "insights": build_insights(current_metrics, previous_metrics),
             "recommendations": recommendations,
+            "breakdowns": breakdowns,
         }
+
+    def _breakdown_analytics(
+        self, date_from: date, date_to: date, campaign_ids: list[str]
+    ) -> dict[str, list[dict[str, object]]]:
+        result = {key: [] for key in (
+            "age", "gender", "platform", "placement", "device", "region", "hour"
+        )}
+        if not campaign_ids:
+            return result
+        rows: list[dict[str, object]] = []
+        offset = 0
+        while True:
+            response = (
+                self.client.table("breakdown_metrics")
+                .select(
+                    "metric_date,dimension_type,dimension_value,spend,impressions,"
+                    "reach,link_clicks,leads,conversations"
+                )
+                .gte("metric_date", date_from.isoformat())
+                .lte("metric_date", date_to.isoformat())
+                .in_("campaign_id", campaign_ids)
+                .range(offset, offset + 999)
+                .execute()
+            )
+            batch = response.data or []
+            rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            offset += 1000
+
+        grouped: dict[tuple[str, str], list[dict[str, object]]] = {}
+        for row in rows:
+            dimension_type = str(row["dimension_type"]).lower()
+            value = str(row["dimension_value"])
+            if dimension_type == "hour":
+                metric_day = date.fromisoformat(str(row["metric_date"])).weekday()
+                value = f"{metric_day}|{value[:2]}"
+            grouped.setdefault((dimension_type, value), []).append(row)
+
+        for (dimension_type, value), metric_rows in grouped.items():
+            if dimension_type not in result:
+                continue
+            metrics = aggregate_metrics(metric_rows)
+            conversions = int(metrics["leads"]) + int(metrics["conversations"])
+            point = {
+                "value": value,
+                **{key: metrics[key] for key in (
+                    "spend", "impressions", "reach", "link_clicks", "leads", "conversations"
+                )},
+                "cpa": safe_divide(Decimal(str(metrics["spend"])), Decimal(conversions)),
+                "conversion_rate": safe_divide(
+                    Decimal(conversions) * 100, Decimal(str(metrics["link_clicks"]))
+                ),
+                "ctr": metrics["link_ctr"],
+                "cpm": metrics["cpm"],
+            }
+            result[dimension_type].append(point)
+        for points in result.values():
+            points.sort(key=lambda item: Decimal(str(item["spend"])), reverse=True)
+        return result
 
     def _decision_statuses(self, keys: list[str]) -> dict[str, str]:
         if not keys:

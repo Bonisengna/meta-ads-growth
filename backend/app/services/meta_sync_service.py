@@ -12,6 +12,17 @@ class MetaEntityNotAccessibleError(LookupError):
     pass
 
 
+BREAKDOWN_SPECS = {
+    "AGE": "age",
+    "GENDER": "gender",
+    "PLATFORM": "publisher_platform",
+    "PLACEMENT": "platform_position",
+    "DEVICE": "impression_device",
+    "REGION": "region",
+    "HOUR": "hourly_stats_aggregated_by_advertiser_time_zone",
+}
+
+
 class MetaSyncService:
     """Orquestra Meta → Supabase preservando identidades e histórico."""
 
@@ -101,6 +112,34 @@ class MetaSyncService:
                     .execute()
                 )
             counts[level] = len(payloads)
+        return counts
+
+    def sync_breakdown_metrics(
+        self, account_id: str, since: date, until: date | None = None
+    ) -> dict[str, int]:
+        until = until or since
+        campaign_ids = self._internal_id_map("campaigns", "meta_campaign_id")
+        counts: dict[str, int] = {}
+        for dimension_type, meta_breakdown in BREAKDOWN_SPECS.items():
+            rows = self.meta.list_breakdown_insights(
+                account_id, meta_breakdown, since.isoformat(), until.isoformat()
+            )
+            payloads = [
+                breakdown_payload(
+                    row,
+                    dimension_type,
+                    meta_breakdown,
+                    campaign_ids.get(str(row.get("campaign_id"))),
+                )
+                for row in rows
+            ]
+            payloads = [payload for payload in payloads if payload is not None]
+            for start in range(0, len(payloads), 500):
+                self.supabase.table("breakdown_metrics").upsert(
+                    payloads[start:start + 500],
+                    on_conflict="campaign_id,metric_date,dimension_type,dimension_value",
+                ).execute()
+            counts[dimension_type.lower()] = len(payloads)
         return counts
 
     def _sync_campaigns(
@@ -315,6 +354,34 @@ def metrics_payload(
         "cost_per_conversation": costs.get(
             "onsite_conversion.messaging_conversation_started_7d"
         ),
+        "updated_at": now_iso(),
+    }
+
+
+def breakdown_payload(
+    row: dict[str, Any],
+    dimension_type: str,
+    meta_breakdown: str,
+    campaign_id: str | None,
+) -> dict[str, Any] | None:
+    dimension_value = row.get(meta_breakdown)
+    if not campaign_id or dimension_value in (None, ""):
+        return None
+    actions = action_map(row.get("actions"))
+    return {
+        "campaign_id": campaign_id,
+        "metric_date": row["date_start"],
+        "dimension_type": dimension_type,
+        "dimension_value": str(dimension_value),
+        "spend": decimal_or_zero(row.get("spend")),
+        "impressions": int(row.get("impressions") or 0),
+        "reach": int(row.get("reach") or 0),
+        "clicks": int(row.get("clicks") or 0),
+        "link_clicks": int(row.get("inline_link_clicks") or 0),
+        "leads": int(float(actions.get("lead", 0))),
+        "conversations": int(float(actions.get(
+            "onsite_conversion.messaging_conversation_started_7d", 0
+        ))),
         "updated_at": now_iso(),
     }
 

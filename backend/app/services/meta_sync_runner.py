@@ -112,14 +112,22 @@ class MetaSyncRunner:
                 self.retry_delay_seconds,
                 self.sleep,
             )
+            breakdowns, breakdown_attempts = retry_transient(
+                lambda: sync.sync_breakdown_metrics(account_id, since, today),
+                self.max_attempts,
+                self.retry_delay_seconds,
+                self.sleep,
+            )
             return {
                 "meta_account_id": account_id,
                 "name": account.get("name"),
                 "status": "SUCCESS",
                 "period": {"date_from": since.isoformat(), "date_to": today.isoformat()},
-                "attempts": {"entities": entity_attempts, "metrics": metric_attempts},
+                "attempts": {"entities": entity_attempts, "metrics": metric_attempts,
+                             "breakdowns": breakdown_attempts},
                 "entities": entities,
                 "metrics": metrics,
+                "breakdowns": breakdowns,
             }
         except Exception as exc:
             result = {

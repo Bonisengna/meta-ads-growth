@@ -104,6 +104,30 @@ class MetaGraphClient:
             )
         )
 
+    def list_breakdown_insights(
+        self, account_id: str, breakdown: str, since: str, until: str
+    ) -> list[dict[str, Any]]:
+        allowed = {
+            "age", "gender", "publisher_platform", "platform_position",
+            "impression_device", "region",
+            "hourly_stats_aggregated_by_advertiser_time_zone",
+        }
+        if breakdown not in allowed:
+            raise ValueError("breakdown não suportado")
+        return list(
+            self._paginate(
+                f"/{account_node(account_id)}/insights",
+                fields=(
+                    "campaign_id,date_start,spend,impressions,reach,clicks,"
+                    "inline_link_clicks,actions"
+                ),
+                level="campaign",
+                breakdowns=breakdown,
+                time_increment="1",
+                time_range={"since": since, "until": until},
+            )
+        )
+
     def _paginate(self, path: str, **params: Any) -> Iterator[dict[str, Any]]:
         params["limit"] = 100
         payload = self._get(path, params=params)

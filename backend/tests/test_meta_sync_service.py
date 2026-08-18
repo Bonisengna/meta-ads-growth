@@ -114,6 +114,18 @@ class FakeMeta:
             }
         ]
 
+    def list_breakdown_insights(
+        self, _account_id: str, breakdown: str, _since: str, _until: str
+    ):
+        if breakdown != "age":
+            return []
+        return [{
+            "campaign_id": "new-campaign", "date_start": "2026-08-15",
+            "age": "25-34", "spend": "20", "impressions": "1000",
+            "reach": "800", "inline_link_clicks": "25",
+            "actions": [{"action_type": "lead", "value": "2"}],
+        }]
+
 
 def test_non_active_meta_status_is_archived() -> None:
     assert entity_status("ACTIVE") == "ACTIVE"
@@ -224,3 +236,17 @@ def test_daily_metrics_accept_historical_interval() -> None:
         ("adset", "2025-11-01", "2025-11-30"),
         ("ad", "2025-11-01", "2025-11-30"),
     ]
+
+
+def test_breakdown_metrics_are_stored_separately() -> None:
+    database = {
+        "campaigns": [{"id": "campaign-internal", "meta_campaign_id": "new-campaign"}],
+        "breakdown_metrics": [],
+    }
+    service = MetaSyncService(FakeSupabase(database), FakeMeta())  # type: ignore[arg-type]
+
+    result = service.sync_breakdown_metrics("123", date(2026, 8, 15))
+
+    assert result["age"] == 1
+    assert database["breakdown_metrics"][0]["dimension_type"] == "AGE"
+    assert database["breakdown_metrics"][0]["dimension_value"] == "25-34"

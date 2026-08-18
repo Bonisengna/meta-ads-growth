@@ -4,6 +4,8 @@ export type Client = { id: string; name: string; slug: string; status: EntitySta
 export type MetaAccount = { id: string; client_id: string; name: string; currency: string | null; status: EntityStatus; last_synced_at: string | null };
 export type Campaign = { id: string; meta_account_id: string; name: string; objective: string | null; status: EntityStatus };
 export type Metrics = { spend: number; impressions: number; reach: number; clicks: number; link_clicks: number; leads: number; conversations: number; cpl: number | null; ctr: number | null; cpc: number | null; cpm: number | null; link_ctr: number | null; frequency: number | null };
+export type BreakdownPoint = { value: string; spend: number; impressions: number; reach: number; link_clicks: number; leads: number; conversations: number; cpa: number | null; conversion_rate: number | null; ctr: number | null; cpm: number | null };
+export type BreakdownAnalytics = { age: BreakdownPoint[]; gender: BreakdownPoint[]; platform: BreakdownPoint[]; placement: BreakdownPoint[]; device: BreakdownPoint[]; region: BreakdownPoint[]; hour: BreakdownPoint[] };
 export type Dashboard = {
   clients: number; meta_accounts: number; campaigns: number; adsets: number; ads: number;
   period: { date_from: string; date_to: string; days: number };
@@ -15,6 +17,7 @@ export type Dashboard = {
   ad_ranking: EntityPerformance[];
   insights: Array<{ code: string; severity: "INFO" | "WARNING" | "OPPORTUNITY"; title: string; message: string }>;
   recommendations: Recommendation[];
+  breakdowns: BreakdownAnalytics;
 };
 export type EntityPerformance = { entity_type: "ADSET" | "AD"; entity_id: string; name: string; status: EntityStatus; spend: number; impressions: number; clicks: number; leads: number; conversations: number; ctr: number | null; cpc: number | null; cost_per_conversation: number | null };
 export type Recommendation = { key: string; entity_type: "ADSET" | "AD"; entity_id: string; entity_name: string; rule_code: string; priority: "HIGH" | "MEDIUM" | "LOW"; title: string; explanation: string; evidence: string; expected_impact: string; status: "PENDING" | "ACCEPTED" | "REJECTED" };

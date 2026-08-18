@@ -113,6 +113,10 @@ class FakeSyncService:
         self.calls.append(("metrics", account_id, since, until))
         return {"campaign": 2, "adset": 3, "ad": 4}
 
+    def sync_breakdown_metrics(self, account_id, since, until):
+        self.calls.append(("breakdowns", account_id, since, until))
+        return {"age": 2, "gender": 2}
+
 
 def make_database() -> dict[str, list[dict]]:
     return {
@@ -142,6 +146,7 @@ def test_runner_syncs_only_active_accounts_and_reprocesses_today(monkeypatch) ->
     assert FakeSyncService.calls == [
         ("entities", "c1", "123"),
         ("metrics", "123", date(2026, 8, 14), date(2026, 8, 16)),
+        ("breakdowns", "123", date(2026, 8, 14), date(2026, 8, 16)),
     ]
     saved = database["sync_runs"][0]
     assert saved["status"] == "SUCCESS"
