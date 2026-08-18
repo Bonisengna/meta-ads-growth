@@ -12,6 +12,20 @@ const integer = new Intl.NumberFormat("pt-BR");
 const decimal = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 type Filters = { days: number; clientId: string; accountId: string; campaignId: string };
 type MainView = "dashboard" | "campaigns" | "analyses" | "settings";
+type TrendMeaning = "positive" | "negative" | "neutral" | "contextual";
+type ExecutivePriority = {
+  key: string;
+  tone: "critical" | "attention" | "opportunity" | "information";
+  label: string;
+  title: string;
+  description: string;
+  evidence?: string;
+};
+
+const higherIsBetterMetrics = new Set<keyof Metrics>([
+  "conversations", "leads", "impressions", "reach", "link_clicks", "ctr", "link_ctr",
+]);
+const lowerIsBetterMetrics = new Set<keyof Metrics>(["cpl", "cpc", "cpm"]);
 
 function friendlyDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
@@ -25,9 +39,64 @@ function metricValue(key: keyof Metrics, value: number | null | undefined) {
   return integer.format(value);
 }
 
+function trendMeaning(metricKey: keyof Metrics, change: number | null | undefined): TrendMeaning {
+  if (change == null || change === 0) return "neutral";
+  if (higherIsBetterMetrics.has(metricKey)) return change > 0 ? "positive" : "negative";
+  if (lowerIsBetterMetrics.has(metricKey)) return change < 0 ? "positive" : "negative";
+  return "contextual";
+}
+
+function trendCopy(meaning: TrendMeaning) {
+  if (meaning === "positive") return "melhora";
+  if (meaning === "negative") return "piora";
+  if (meaning === "contextual") return "avaliar com resultados";
+  return "sem alteração";
+}
+
 function MetricCard({ label, metricKey, metrics, change }: { label: string; metricKey: keyof Metrics; metrics: Metrics; change?: number | null }) {
-  const positive = change != null && change >= 0;
-  return <article className="metric-card"><span>{label}</span><strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={change == null ? "neutral" : positive ? "positive" : "negative"}>{change == null ? "sem base anterior" : `${positive ? "+" : ""}${decimal.format(change)}% vs. anterior`}</small></article>;
+  const meaning = trendMeaning(metricKey, change);
+  const changeCopy = change == null
+    ? "sem base anterior"
+    : `${change > 0 ? "+" : ""}${decimal.format(change)}% vs. anterior · ${trendCopy(meaning)}`;
+  return <article className="metric-card"><span>{label}</span><strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={meaning}>{changeCopy}</small></article>;
+}
+
+function executivePriorities(dashboard: Dashboard): ExecutivePriority[] {
+  const recommendationPriority = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
+  const recommendations: ExecutivePriority[] = dashboard.recommendations
+    .filter((item) => item.status === "PENDING")
+    .sort((a, b) => recommendationPriority[a.priority] - recommendationPriority[b.priority])
+    .map((item) => ({
+      key: `recommendation-${item.key}`,
+      tone: item.priority === "HIGH" ? "critical" : "attention",
+      label: item.priority === "HIGH" ? "Ação prioritária" : "Ação recomendada",
+      title: item.title,
+      description: item.explanation,
+      evidence: item.evidence,
+    }));
+  const insightOrder = { WARNING: 0, OPPORTUNITY: 1, INFO: 2 } as const;
+  const insights: ExecutivePriority[] = [...dashboard.insights]
+    .sort((a, b) => insightOrder[a.severity] - insightOrder[b.severity])
+    .map((item) => ({
+      key: `insight-${item.code}`,
+      tone: item.severity === "WARNING" ? "attention" : item.severity === "OPPORTUNITY" ? "opportunity" : "information",
+      label: item.severity === "WARNING" ? "Ponto de atenção" : item.severity === "OPPORTUNITY" ? "Oportunidade" : "Leitura do período",
+      title: item.title,
+      description: item.message,
+    }));
+  return [...recommendations, ...insights].slice(0, 3);
+}
+
+function ExecutiveSummary({ dashboard, onOpenAnalyses }: { dashboard: Dashboard; onOpenAnalyses: () => void }) {
+  const priorities = executivePriorities(dashboard);
+  const attentionCount = priorities.filter((item) => item.tone === "critical" || item.tone === "attention").length;
+  const headline = attentionCount > 0
+    ? `${attentionCount} ${attentionCount === 1 ? "ponto exige" : "pontos exigem"} sua atenção`
+    : priorities.length > 0 ? "Período sem alertas críticos" : "Nenhum sinal relevante neste período";
+  return <section className="executive-summary" aria-labelledby="executive-summary-title"><div className="executive-summary-head"><div><p className="eyebrow coral">PRIORIDADES DO PERÍODO</p><h2 id="executive-summary-title">{headline}</h2><p>Comece por estes sinais antes de explorar os gráficos e rankings.</p></div>{priorities.length > 0 && <button onClick={onOpenAnalyses}>Abrir análise completa</button>}</div>
+    {priorities.length > 0 ? <div className="priority-grid">{priorities.map((item, index) => <article className={`priority-card ${item.tone}`} key={item.key}><div className="priority-card-top"><span>{index + 1}</span><small>{item.label}</small></div><h3>{item.title}</h3><p>{item.description}</p>{item.evidence && <small className="priority-evidence"><b>Evidência:</b> {item.evidence}</small>}</article>)}</div>
+      : <div className="executive-clear"><span>✓</span><p>Não há diagnóstico forte o suficiente para recomendar uma ação agora. Continue acompanhando o próximo período.</p></div>}
+  </section>;
 }
 
 function RankingTable({ title, items }: { title: string; items: EntityPerformance[] }) {
@@ -245,7 +314,7 @@ export default function Home() {
       {loading && !dashboard && <section className="dashboard-loading" aria-label="Carregando painel"><div /><div /><div /><div /></section>}
       {!loading && !dashboard && !error && <div className="empty-state dashboard-empty"><strong>O painel ainda não possui informações.</strong><span>Verifique a conexão Meta em Ajustes ou atualize os resultados.</span><button onClick={() => navigate("settings")}>Abrir Ajustes</button></div>}
       {dashboard && <>{dashboard.metrics.spend === 0 && <div className="guidance-banner"><div><strong>Nenhum investimento encontrado neste período.</strong><span>Isso não é um erro. Escolha um período em que as campanhas estiveram ativas ou mantenha esta visão para acompanhar a próxima coleta.</span></div><button onClick={() => setFilters({ ...filters, days: 120 })}>Ver 120 dias</button></div>}<section className="period-line"><span>{friendlyDate(dashboard.period.date_from)} → {friendlyDate(dashboard.period.date_to)}</span><small>comparado a {friendlyDate(dashboard.previous_period.date_from)} → {friendlyDate(dashboard.previous_period.date_to)}</small></section>
-        {view === "dashboard" && <><section className="metrics-grid"><MetricCard label="Investimento" metricKey="spend" metrics={dashboard.metrics} change={dashboard.change_percent.spend} /><MetricCard label="Conversas" metricKey="conversations" metrics={dashboard.metrics} change={dashboard.change_percent.conversations} /><MetricCard label="Leads" metricKey="leads" metrics={dashboard.metrics} change={dashboard.change_percent.leads} /><MetricCard label="CPL" metricKey="cpl" metrics={dashboard.metrics} change={dashboard.change_percent.cpl} /><MetricCard label="CTR de link" metricKey="link_ctr" metrics={dashboard.metrics} change={dashboard.change_percent.link_ctr} /><MetricCard label="CPM" metricKey="cpm" metrics={dashboard.metrics} change={dashboard.change_percent.cpm} /></section>
+        {view === "dashboard" && <><ExecutiveSummary dashboard={dashboard} onOpenAnalyses={() => navigate("analyses")} /><section className="metrics-grid"><MetricCard label="Investimento" metricKey="spend" metrics={dashboard.metrics} change={dashboard.change_percent.spend} /><MetricCard label="Conversas" metricKey="conversations" metrics={dashboard.metrics} change={dashboard.change_percent.conversations} /><MetricCard label="Leads" metricKey="leads" metrics={dashboard.metrics} change={dashboard.change_percent.leads} /><MetricCard label="CPL" metricKey="cpl" metrics={dashboard.metrics} change={dashboard.change_percent.cpl} /><MetricCard label="CTR de link" metricKey="link_ctr" metrics={dashboard.metrics} change={dashboard.change_percent.link_ctr} /><MetricCard label="CPM" metricKey="cpm" metrics={dashboard.metrics} change={dashboard.change_percent.cpm} /></section>
           <section className="content-grid"><article className="panel"><div className="panel-title"><div><p className="eyebrow">EVOLUÇÃO DIÁRIA</p><h2>Investimento por dia</h2></div><span className="pill">{dashboard.daily_series.length} dias</span></div><div className="bars">{dashboard.daily_series.map((point) => { const maximum = Math.max(...dashboard.daily_series.map((item) => item.spend), 1); return <div className="bar-column" key={point.metric_date} title={`${point.metric_date}: ${currency.format(point.spend)}`}><div style={{ height: `${Math.max((point.spend / maximum) * 100, point.spend ? 4 : 0)}%` }} /><small>{point.metric_date.slice(5)}</small></div>; })}</div></article><article className="panel insights-panel"><p className="eyebrow">DIAGNÓSTICO POR REGRAS</p><h2>Sinais do período</h2><div className="insight-list">{dashboard.insights.map((insight) => <div className={`insight ${insight.severity.toLowerCase()}`} key={insight.code}><strong>{insight.title}</strong><p>{insight.message}</p></div>)}</div><small>Nenhuma ação é executada automaticamente.</small></article></section>
           <section className="content-grid"><article className="panel structure-panel"><div className="panel-title"><div><p className="eyebrow">ESTRUTURA IMPORTADA</p><h2>Conta em números</h2></div><span className="pill">Somente leitura</span></div><div className="structure-flow">{[[dashboard.clients,"Clientes"],[dashboard.meta_accounts,"Contas"],[dashboard.campaigns,"Campanhas"],[dashboard.adsets,"Conjuntos"],[dashboard.ads,"Anúncios"]].map(([value,label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></article><article className="panel signal-panel"><p className="eyebrow">LEITURA RÁPIDA</p><h2>Sinal do período</h2><div className="signal"><span>{dashboard.metrics.conversations > 0 ? "↗" : "—"}</span><div><strong>{dashboard.metrics.conversations > 0 ? `${dashboard.metrics.conversations} conversas registradas` : "Sem conversões no período"}</strong><p>{dashboard.metrics.conversations > 0 ? `Custo médio de ${currency.format(dashboard.metrics.spend / dashboard.metrics.conversations)} por conversa.` : "Amplie o período ou revise a coleta antes de concluir."}</p></div></div><small>Interpretação determinística. IA entra na próxima entrega.</small></article></section>
           <section className="analytics-dashboard"><div className="analytics-heading"><div><p className="eyebrow coral">MAPA DE PERFORMANCE</p><h2>Quem converte, onde e quando</h2><p>Os gráficos usam recortes independentes da Meta e não alteram os totais do painel.</p></div><span className="pill">Atualização diária</span></div><div className="analytics-grid"><BreakdownChart title="Faixas etárias" subtitle="PÚBLICO · IDADE" points={dashboard.breakdowns?.age ?? []} /><BreakdownChart title="Gênero" subtitle="PÚBLICO · GÊNERO" points={dashboard.breakdowns?.gender ?? []} /><BreakdownChart title="Posicionamentos" subtitle="CANAIS · PLACEMENT" points={dashboard.breakdowns?.placement ?? []} /><BreakdownChart title="Plataformas" subtitle="CANAIS · FACEBOOK X INSTAGRAM" points={dashboard.breakdowns?.platform ?? []} /><BreakdownChart title="Dispositivos" subtitle="EXPERIÊNCIA · MOBILE X DESKTOP" points={dashboard.breakdowns?.device ?? []} /><BreakdownChart title="Regiões" subtitle="GEOGRAFIA · MELHORES RESULTADOS" points={dashboard.breakdowns?.region ?? []} /></div><TimeHeatmap points={dashboard.breakdowns?.hour ?? []} /></section></>}
