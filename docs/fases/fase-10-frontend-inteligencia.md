@@ -52,6 +52,20 @@ ou token Meta. Apenas URL e chave publicável usam o prefixo `NEXT_PUBLIC_`.
 - imagem de referência usada apenas como direção visual, sem copiar marca ou
   componentes de terceiros.
 
+## Navegação por rotas
+
+As áreas principais possuem URLs próprias e podem ser abertas, atualizadas e
+compartilhadas sem perder o contexto atual:
+
+- `/dashboard`: visão geral e prioridades do período;
+- `/campaigns`: métricas e rankings por estrutura;
+- `/analyses`: diagnóstico do funil e decisões assistidas;
+- `/settings`: conta, integrações e segurança.
+
+Os filtros de período, cliente, conta e campanha são mantidos como parâmetros
+da URL. A navegação respeita os botões voltar e avançar do navegador, e a rota
+raiz redireciona para `/dashboard` preservando os filtros selecionados.
+
 ## Próximas entregas
 
 1. ranking de conjuntos e anúncios;

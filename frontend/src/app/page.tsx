@@ -1,6 +1,7 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
+import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost, query } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
@@ -26,6 +27,42 @@ const higherIsBetterMetrics = new Set<keyof Metrics>([
   "conversations", "leads", "link_clicks", "ctr", "link_ctr",
 ]);
 const lowerIsBetterMetrics = new Set<keyof Metrics>(["cpl", "cpc"]);
+const defaultFilters: Filters = { days: 30, clientId: "", accountId: "", campaignId: "" };
+const viewRoutes: Record<MainView, string> = {
+  dashboard: "/dashboard",
+  campaigns: "/campaigns",
+  analyses: "/analyses",
+  settings: "/settings",
+};
+
+function viewFromPathname(pathname: string): MainView {
+  const segment = pathname.split("/").filter(Boolean)[0];
+  if (segment === "campaigns" || segment === "analyses" || segment === "settings") return segment;
+  return "dashboard";
+}
+
+function filtersFromLocation(): Filters {
+  if (typeof window === "undefined") return defaultFilters;
+  const params = new URLSearchParams(window.location.search);
+  const requestedDays = Number(params.get("days"));
+  const days = periods.includes(requestedDays as (typeof periods)[number]) ? requestedDays : defaultFilters.days;
+  return {
+    days,
+    clientId: params.get("client") ?? "",
+    accountId: params.get("account") ?? "",
+    campaignId: params.get("campaign") ?? "",
+  };
+}
+
+function filtersQuery(filters: Filters) {
+  const params = new URLSearchParams();
+  if (filters.days !== defaultFilters.days) params.set("days", String(filters.days));
+  if (filters.clientId) params.set("client", filters.clientId);
+  if (filters.accountId) params.set("account", filters.accountId);
+  if (filters.campaignId) params.set("campaign", filters.campaignId);
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : "";
+}
 type IndicatorGuide = { title: string; meaning: string; direction: string; attention: string };
 
 const metricGuides: Partial<Record<keyof Metrics, IndicatorGuide>> = {
@@ -254,13 +291,16 @@ function SettingsPanel({ token, clients, userEmail }: { token: string; clients: 
 }
 
 export default function Home() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const view = viewFromPathname(pathname);
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [filters, setFilters] = useState<Filters>({ days: 30, clientId: "", accountId: "", campaignId: "" });
+  const [filters, setFilters] = useState<Filters>(filtersFromLocation);
   const [clients, setClients] = useState<Client[]>([]);
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -269,8 +309,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [decisions, setDecisions] = useState<Record<string, "ACCEPTED" | "REJECTED">>({});
-  const [view, setView] = useState<MainView>("dashboard");
   const initialLoadStarted = useRef(false);
+
+  useEffect(() => {
+    if (pathname === "/") router.replace(`${viewRoutes.dashboard}${filtersQuery(filters)}`, { scroll: false });
+  }, [filters, pathname, router]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
@@ -328,13 +371,15 @@ export default function Home() {
   }
 
   function navigate(next: MainView) {
-    setView(next);
-    if (next === "settings") return;
-    window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
+    router.push(`${viewRoutes[next]}${filtersQuery(filters)}`, { scroll: next !== "settings" });
   }
 
   const hasFilters = Boolean(filters.clientId || filters.accountId || filters.campaignId || filters.days !== 30);
-  const clearFilters = () => setFilters({ days: 30, clientId: "", accountId: "", campaignId: "" });
+  const updateFilters = (next: Filters) => {
+    setFilters(next);
+    router.replace(`${viewRoutes[view]}${filtersQuery(next)}`, { scroll: false });
+  };
+  const clearFilters = () => updateFilters(defaultFilters);
   const pageCopy = view === "campaigns"
     ? { eyebrow: "DESEMPENHO POR ESTRUTURA", title: "Campanhas", subtitle: "Compare campanhas, conjuntos e anúncios sem misturar diagnósticos." }
     : view === "analyses"
@@ -346,13 +391,13 @@ export default function Home() {
   if (!session) return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Decisões melhores começam com números claros.</h1><p>Campanhas, comparações e sinais de desempenho em um só lugar — sem alterar nada na Meta.</p><div className="trust-line"><i /> Dados protegidos por usuário e cliente</div></section><section className="login-panel"><form onSubmit={signIn}><div><p className="eyebrow coral">ACESSO SEGURO</p><h2>Bem-vinda de volta</h2><p>Use o usuário criado no Supabase.</p></div><label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label><label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" /></label>{authError && <p className="form-error">{authError}</p>}<button type="submit">Entrar no painel <span>→</span></button><small>O token permanece na sessão do navegador e nunca é exibido.</small></form></section></main>;
 
   return <main className="app-shell">
-    <aside><div className="logo"><div className="brand-mark small">D</div><div><strong>DescompliADS</strong><small>Growth Intelligence</small></div></div><nav aria-label="Navegação principal"><button className={view === "dashboard" ? "active" : ""} onClick={() => navigate("dashboard")}>◫ <span>Visão geral</span></button><button className={view === "campaigns" ? "active" : ""} onClick={() => navigate("campaigns")}>◎ <span>Campanhas</span></button><button className={view === "analyses" ? "active" : ""} onClick={() => navigate("analyses")}>◇ <span>Análises</span></button><button className={view === "settings" ? "active" : ""} onClick={() => navigate("settings")}>⚙ <span>Ajustes</span></button></nav><div className="sidebar-foot"><span className="status-dot" /> Sistema conectado<button onClick={() => supabase.auth.signOut()}>Sair</button></div></aside>
+    <aside><div className="logo"><div className="brand-mark small">D</div><div><strong>DescompliADS</strong><small>Growth Intelligence</small></div></div><nav aria-label="Navegação principal"><button className={view === "dashboard" ? "active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}>◫ <span>Visão geral</span></button><button className={view === "campaigns" ? "active" : ""} aria-current={view === "campaigns" ? "page" : undefined} onClick={() => navigate("campaigns")}>◎ <span>Campanhas</span></button><button className={view === "analyses" ? "active" : ""} aria-current={view === "analyses" ? "page" : undefined} onClick={() => navigate("analyses")}>◇ <span>Análises</span></button><button className={view === "settings" ? "active" : ""} aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>⚙ <span>Ajustes</span></button></nav><div className="sidebar-foot"><span className="status-dot" /> Sistema conectado<button onClick={() => supabase.auth.signOut()}>Sair</button></div></aside>
     {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} /></section> : <section className="workspace" id="dashboard-top"><header><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{pageCopy.title}</h1><p>{pageCopy.subtitle}</p></div></header>
-      <section className="filters"><div className="filter-heading"><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div><label>Período<select value={filters.days} onChange={(e) => setFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => setFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => setFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => setFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
+      <section className="filters"><div className="filter-heading"><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div><label>Período<select value={filters.days} onChange={(e) => updateFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => updateFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => updateFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => updateFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => void loadData()}>Tentar novamente</button></div>}
       {loading && !dashboard && <section className="dashboard-loading" aria-label="Carregando painel"><div /><div /><div /><div /></section>}
       {!loading && !dashboard && !error && <div className="empty-state dashboard-empty"><strong>O painel ainda não possui informações.</strong><span>Verifique a conexão Meta em Ajustes ou atualize os resultados.</span><button onClick={() => navigate("settings")}>Abrir Ajustes</button></div>}
-      {dashboard && <>{dashboard.metrics.spend === 0 && <div className="guidance-banner"><div><strong>Nenhum investimento encontrado neste período.</strong><span>Isso não é um erro. Escolha um período em que as campanhas estiveram ativas ou mantenha esta visão para acompanhar a próxima coleta.</span></div><button onClick={() => setFilters({ ...filters, days: 180 })}>Ver 180 dias</button></div>}<section className="period-line"><span>{friendlyDate(dashboard.period.date_from)} → {friendlyDate(dashboard.period.date_to)}</span><small>comparado a {friendlyDate(dashboard.previous_period.date_from)} → {friendlyDate(dashboard.previous_period.date_to)}</small></section>
+      {dashboard && <>{dashboard.metrics.spend === 0 && <div className="guidance-banner"><div><strong>Nenhum investimento encontrado neste período.</strong><span>Isso não é um erro. Escolha um período em que as campanhas estiveram ativas ou mantenha esta visão para acompanhar a próxima coleta.</span></div><button onClick={() => updateFilters({ ...filters, days: 180 })}>Ver 180 dias</button></div>}<section className="period-line"><span>{friendlyDate(dashboard.period.date_from)} → {friendlyDate(dashboard.period.date_to)}</span><small>comparado a {friendlyDate(dashboard.previous_period.date_from)} → {friendlyDate(dashboard.previous_period.date_to)}</small></section>
         {view === "dashboard" && <><ExecutiveSummary dashboard={dashboard} onOpenAnalyses={() => navigate("analyses")} /><section className="metrics-grid"><MetricCard label="Investimento" metricKey="spend" metrics={dashboard.metrics} change={dashboard.change_percent.spend} /><MetricCard label="Conversas" metricKey="conversations" metrics={dashboard.metrics} change={dashboard.change_percent.conversations} /><MetricCard label="Leads" metricKey="leads" metrics={dashboard.metrics} change={dashboard.change_percent.leads} /><MetricCard label="CPL" metricKey="cpl" metrics={dashboard.metrics} change={dashboard.change_percent.cpl} /><MetricCard label="CTR de link" metricKey="link_ctr" metrics={dashboard.metrics} change={dashboard.change_percent.link_ctr} /><MetricCard label="CPM" metricKey="cpm" metrics={dashboard.metrics} change={dashboard.change_percent.cpm} /></section>
           <section className="content-grid"><article className="panel"><div className="panel-title"><div><p className="eyebrow">EVOLUÇÃO DIÁRIA</p><h2>Investimento por dia</h2></div><span className="pill">{dashboard.daily_series.length} dias</span></div><div className="bars">{dashboard.daily_series.map((point) => { const maximum = Math.max(...dashboard.daily_series.map((item) => item.spend), 1); return <div className="bar-column" key={point.metric_date} title={`${point.metric_date}: ${currency.format(point.spend)}`}><div style={{ height: `${Math.max((point.spend / maximum) * 100, point.spend ? 4 : 0)}%` }} /><small>{point.metric_date.slice(5)}</small></div>; })}</div></article><article className="panel insights-panel"><p className="eyebrow">DIAGNÓSTICO POR REGRAS</p><h2>Sinais do período</h2><div className="insight-list">{dashboard.insights.map((insight) => <div className={`insight ${insight.severity.toLowerCase()}`} key={insight.code}><strong>{insight.title}</strong><p>{insight.message}</p></div>)}</div><small>Nenhuma ação é executada automaticamente.</small></article></section>
           <section className="content-grid"><article className="panel structure-panel"><div className="panel-title"><div><p className="eyebrow">ESTRUTURA IMPORTADA</p><h2>Conta em números</h2></div><span className="pill">Somente leitura</span></div><div className="structure-flow">{[[dashboard.clients,"Clientes"],[dashboard.meta_accounts,"Contas"],[dashboard.campaigns,"Campanhas"],[dashboard.adsets,"Conjuntos"],[dashboard.ads,"Anúncios"]].map(([value,label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></article><article className="panel signal-panel"><p className="eyebrow">LEITURA RÁPIDA</p><h2>Sinal do período</h2><div className="signal"><span>{dashboard.metrics.conversations > 0 ? "↗" : "—"}</span><div><strong>{dashboard.metrics.conversations > 0 ? `${dashboard.metrics.conversations} conversas registradas` : "Sem conversões no período"}</strong><p>{dashboard.metrics.conversations > 0 ? `Custo médio de ${currency.format(dashboard.metrics.spend / dashboard.metrics.conversations)} por conversa.` : "Amplie o período ou revise a coleta antes de concluir."}</p></div></div><small>Interpretação determinística. IA entra na próxima entrega.</small></article></section>
