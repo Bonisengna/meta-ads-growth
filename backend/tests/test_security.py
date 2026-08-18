@@ -108,3 +108,12 @@ def test_cors_accepts_only_configured_local_origin() -> None:
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_cors_allows_secure_settings_post() -> None:
+    response = TestClient(main_app).options(
+        "/api/v1/settings/meta",
+        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "POST"},
+    )
+    assert response.status_code == 200
+    assert "POST" in response.headers["access-control-allow-methods"]
