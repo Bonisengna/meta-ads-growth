@@ -28,12 +28,19 @@ function RankingTable({ title, items }: { title: string; items: EntityPerformanc
   return <article className="panel table-panel"><div className="panel-title"><div><p className="eyebrow">RANKING DE PERFORMANCE</p><h2>{title}</h2></div><span>{items.length} com entrega</span></div><div className="table-wrap"><table><thead><tr><th>Nome</th><th>Investimento</th><th>Conversas</th><th>CTR</th><th>Custo/conversa</th></tr></thead><tbody>{items.map((item) => <tr key={item.entity_id}><td>{item.name}</td><td>{currency.format(item.spend)}</td><td>{integer.format(item.conversations)}</td><td>{item.ctr === null ? "—" : `${decimal.format(item.ctr)}%`}</td><td>{item.cost_per_conversation === null ? "—" : currency.format(item.cost_per_conversation)}</td></tr>)}</tbody></table></div></article>;
 }
 
+type SettingsSection = "general" | "users" | "clients" | "meta" | "ai" | "crm" | "webhooks" | "meta-app" | "api" | "security";
+
+function FieldHelp({ text }: { text: string }) {
+  return <span className="field-help" tabIndex={0} aria-label={text}>?<span role="tooltip">{text}</span></span>;
+}
+
 function SettingsPanel({ token, clients }: { token: string; clients: Client[] }) {
   const [data, setData] = useState<SettingsData | null>(null);
+  const [section, setSection] = useState<SettingsSection>("meta");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [meta, setMeta] = useState({ client_id: clients[0]?.id ?? "", connection_name: "Meta Ads", ad_account_id: "", business_id: "", access_token: "" });
-  const [system, setSystem] = useState({ meta_app_id: "", meta_app_secret: "", graph_version: "v25.0", openai_api_key: "" });
+  const [system, setSystem] = useState({ meta_app_id: "", meta_app_secret: "", system_user_id: "", graph_version: "v25.0", openai_api_key: "" });
 
   const refresh = useCallback(async () => setData(await apiGet<SettingsData>("/api/v1/settings", token)), [token]);
   useEffect(() => {
@@ -45,7 +52,7 @@ function SettingsPanel({ token, clients }: { token: string; clients: Client[] })
     event.preventDefault(); setBusy(true); setMessage("");
     try {
       await apiPost("/api/v1/settings/meta", token, { ...meta, business_id: meta.business_id || null });
-      setMeta((value) => ({ ...value, access_token: "" })); setMessage("Conexão Meta validada e guardada no cofre."); await refresh();
+      setMeta((value) => ({ ...value, access_token: "" })); setMessage("Tudo certo! A conexão com a Meta foi verificada e salva com segurança."); await refresh();
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar."); }
     finally { setBusy(false); }
   }
@@ -55,24 +62,55 @@ function SettingsPanel({ token, clients }: { token: string; clients: Client[] })
     try {
       await apiPost("/api/v1/settings/system", token, {
         meta_app_id: system.meta_app_id || null, meta_app_secret: system.meta_app_secret || null,
-        graph_version: system.graph_version, openai_api_key: system.openai_api_key || null,
+        system_user_id: system.system_user_id || null, graph_version: system.graph_version,
+        openai_api_key: system.openai_api_key || null,
       });
-      setSystem((value) => ({ ...value, meta_app_secret: "", openai_api_key: "" })); setMessage("Credenciais do sistema substituídas com segurança."); await refresh();
+      setSystem((value) => ({ ...value, meta_app_secret: "", openai_api_key: "" })); setMessage("Configuração atualizada e protegida com segurança."); await refresh();
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar."); }
     finally { setBusy(false); }
   }
 
   const configured = (provider: string, clientId?: string) => data?.credentials.find((item) => item.provider === provider && (!clientId || item.client_id === clientId));
-  return <section className="settings-page"><header><div><p className="eyebrow coral">CONFIGURAÇÃO SEGURA</p><h1>Ajustes e integrações</h1><p>Conecte fontes de dados sem expor credenciais no navegador.</p></div></header>
+  const metaStatus = configured("META_CLIENT", meta.client_id);
+  const configText = (key: string) => typeof metaStatus?.config[key] === "string" ? String(metaStatus.config[key]) : "Não informado";
+  const formattedDate = metaStatus?.last_validated_at ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(metaStatus.last_validated_at)) : "Ainda não realizada";
+  const menu = (id: SettingsSection, label: string, soon = false) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setMessage(""); }}>{label}{soon && <em>em breve</em>}</button>;
+  const placeholder = (title: string, description: string) => <div className="settings-card settings-placeholder"><h2>{title}</h2><p>{description}</p><span>Esta área será liberada em uma próxima etapa.</span></div>;
+
+  return <section className="settings-page"><header><div><p className="eyebrow coral">AJUSTES</p><h1>Configurações</h1><p>Organize conexões e preferências com explicações em cada campo.</p></div></header>
     {message && <div className="settings-message">{message}</div>}
-    <div className="settings-grid"><form className="settings-card" onSubmit={saveMeta}><div className="settings-card-head"><div className="settings-icon">M</div><div><h2>Meta Ads do cliente</h2><p>Token com permissão mínima <code>ads_read</code>.</p></div><span className={configured("META_CLIENT", meta.client_id) ? "connection-ok" : "connection-pending"}>{configured("META_CLIENT", meta.client_id) ? "Configurado" : "Pendente"}</span></div>
-      <label>Cliente<select value={meta.client_id} onChange={(e) => setMeta({ ...meta, client_id: e.target.value })} required><option value="">Selecione</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <div className="form-row"><label>Nome da conexão<input value={meta.connection_name} onChange={(e) => setMeta({ ...meta, connection_name: e.target.value })} required /></label><label>Ad Account ID<input value={meta.ad_account_id} onChange={(e) => setMeta({ ...meta, ad_account_id: e.target.value })} placeholder="act_123456789" required /></label></div>
-      <label>Business ID <small>opcional</small><input value={meta.business_id} onChange={(e) => setMeta({ ...meta, business_id: e.target.value })} /></label>
-      <label>Access Token<input type="password" value={meta.access_token} onChange={(e) => setMeta({ ...meta, access_token: e.target.value })} placeholder={configured("META_CLIENT", meta.client_id) ? "•••••••• configurado — digite para substituir" : "Cole o token"} required autoComplete="new-password" /></label>
-      <div className="secret-note">O token será validado na Meta e armazenado criptografado. Depois de salvo, não poderá ser visualizado.</div><button disabled={busy}>{busy ? "Validando…" : "Testar e salvar conexão"}</button></form>
-      <form className="settings-card" onSubmit={saveSystem}><div className="settings-card-head"><div className="settings-icon ai">AI</div><div><h2>Credenciais do sistema</h2><p>Somente Superadmin/Developer.</p></div><span className={data?.system_admin ? "connection-ok" : "connection-pending"}>{data?.system_admin ? "Autorizado" : "Restrito"}</span></div>
-      {!data?.system_admin ? <div className="restricted-box">Seu usuário não possui o papel Superadmin. As credenciais globais permanecem ocultas.</div> : <><h3>Aplicação Meta</h3><div className="form-row"><label>Meta App ID<input value={system.meta_app_id} onChange={(e) => setSystem({ ...system, meta_app_id: e.target.value })} /></label><label>Graph API<select value={system.graph_version} onChange={(e) => setSystem({ ...system, graph_version: e.target.value })}><option>v25.0</option><option>v24.0</option></select></label></div><label>Meta App Secret<input type="password" value={system.meta_app_secret} onChange={(e) => setSystem({ ...system, meta_app_secret: e.target.value })} placeholder={configured("META_SYSTEM") ? "•••••••• configurado — digite para substituir" : "Digite o segredo"} autoComplete="new-password" /></label><div className="settings-divider" /><h3>Inteligência Artificial</h3><label>Provider<select disabled><option>OpenAI</option></select></label><label>OpenAI API Key<input type="password" value={system.openai_api_key} onChange={(e) => setSystem({ ...system, openai_api_key: e.target.value })} placeholder={configured("OPENAI") ? "•••••••• configurada — digite para substituir" : "sk-proj-…"} autoComplete="new-password" /></label><div className="secret-note">A chave será apenas guardada nesta etapa. Nenhuma chamada de IA ou cobrança será iniciada.</div><button disabled={busy}>{busy ? "Salvando…" : "Salvar no cofre"}</button></>}</form></div>
+    <div className="settings-layout"><nav className="settings-nav">
+      <strong>Conta</strong>{menu("general", "Geral")}{menu("users", "Usuários", true)}{menu("clients", "Clientes", true)}
+      <strong>Integrações</strong>{menu("meta", "Meta Ads")}{menu("ai", "Inteligência Artificial")}{menu("crm", "CRM", true)}{menu("webhooks", "Webhooks", true)}
+      {data?.system_admin && <><strong>Sistema</strong>{menu("meta-app", "Aplicativo Meta")}{menu("api", "API e serviços")}{menu("security", "Segurança")}</>}
+    </nav><div className="settings-content">
+      {section === "meta" && <form className="settings-card" onSubmit={saveMeta}><div className="settings-card-head"><div className="settings-icon">M</div><div><h2>Meta Ads</h2><p>Conexão da conta de anúncios do cliente.</p></div><span className={metaStatus ? "connection-ok" : "connection-pending"}>{metaStatus ? "Conectado" : "Não conectado"}</span></div>
+        <label><span>Cliente <FieldHelp text="Escolha a empresa que será dona desta conexão." /></span><select value={meta.client_id} onChange={(e) => setMeta({ ...meta, client_id: e.target.value })} required><option value="">Selecione</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label><span>Nome da conexão <FieldHelp text="Use um nome fácil de reconhecer, como Meta Ads — Cliente Odisséia." /></span><input value={meta.connection_name} onChange={(e) => setMeta({ ...meta, connection_name: e.target.value })} required /></label>
+        <label><span>ID do Business Manager <small>opcional</small> <FieldHelp text="No Gerenciador de Negócios da Meta, abra Configurações do negócio → Informações da empresa." /></span><input value={meta.business_id} onChange={(e) => setMeta({ ...meta, business_id: e.target.value })} placeholder="123456789" /></label>
+        <label><span>ID da conta de anúncios <FieldHelp text="No Gerenciador de Anúncios, ele aparece no seletor de contas. Pode ser informado como act_123456789." /></span><input value={meta.ad_account_id} onChange={(e) => setMeta({ ...meta, ad_account_id: e.target.value })} placeholder="act_123456789" required /></label>
+        <label><span>Token de acesso <FieldHelp text="Gere na Meta for Developers ou pelo usuário do sistema, com a permissão Leitura de anúncios (ads_read)." /></span><input type="password" value={meta.access_token} onChange={(e) => setMeta({ ...meta, access_token: e.target.value })} placeholder={metaStatus ? "•••••••• configurado — digite para substituir" : "Cole o token"} required autoComplete="new-password" /></label>
+        <div className="secret-note">Depois de salvo, o token não pode ser visualizado. Para trocar, informe um novo token.</div><button disabled={busy}>{busy ? "Verificando…" : "Verificar e salvar conexão"}</button>
+        {metaStatus && <div className="connection-summary"><h3>Situação da conexão</h3><dl><div><dt>Situação</dt><dd><i /> Conectado</dd></div><div><dt>Permissão</dt><dd>Leitura de anúncios <small>(ads_read)</small></dd></div><div><dt>Conta encontrada</dt><dd>{configText("account_name")}</dd></div><div><dt>Moeda</dt><dd>{configText("currency")}</dd></div><div><dt>Fuso horário</dt><dd>{configText("timezone")}</dd></div><div><dt>Última verificação</dt><dd>{formattedDate}</dd></div></dl></div>}
+      </form>}
+      {section === "meta-app" && <form className="settings-card" onSubmit={saveSystem}><div className="settings-card-head"><div className="settings-icon">M</div><div><h2>Aplicativo Meta</h2><p>Configuração global, disponível somente para administrador.</p></div><span className={configured("META_SYSTEM") ? "connection-ok" : "connection-pending"}>{configured("META_SYSTEM") ? "Configurado" : "Pendente"}</span></div>
+        <label><span>ID do aplicativo <FieldHelp text="Na Meta for Developers, abra seu aplicativo → Configurações → Básico." /></span><input value={system.meta_app_id} onChange={(e) => setSystem({ ...system, meta_app_id: e.target.value })} /></label>
+        <label><span>Chave secreta do aplicativo <FieldHelp text="Na mesma tela do aplicativo, use Mostrar em Chave secreta do aplicativo. Nunca envie essa chave por mensagem." /></span><input type="password" value={system.meta_app_secret} onChange={(e) => setSystem({ ...system, meta_app_secret: e.target.value })} placeholder={configured("META_SYSTEM") ? "•••••••• configurada — digite para substituir" : "Digite a chave secreta"} autoComplete="new-password" /></label>
+        <label><span>ID do usuário do sistema <FieldHelp text="Em Configurações do negócio → Usuários → Usuários do sistema, selecione o usuário de produção." /></span><input value={system.system_user_id} onChange={(e) => setSystem({ ...system, system_user_id: e.target.value })} /></label>
+        <label><span>Versão de comunicação com a Meta <FieldHelp text="Versão da Graph API usada pelo sistema. Altere somente após validar a compatibilidade." /></span><select value={system.graph_version} onChange={(e) => setSystem({ ...system, graph_version: e.target.value })}><option>v25.0</option><option>v24.0</option></select></label>
+        <button disabled={busy || !system.meta_app_secret}>{busy ? "Salvando…" : "Salvar configuração"}</button>
+      </form>}
+      {section === "ai" && <form className="settings-card" onSubmit={saveSystem}><div className="settings-card-head"><div className="settings-icon ai">IA</div><div><h2>Inteligência Artificial</h2><p>Conecte o serviço que apoiará as análises.</p></div><span className={configured("OPENAI") ? "connection-ok" : "connection-pending"}>{configured("OPENAI") ? "Configurado" : "Pendente"}</span></div>
+        {!data?.system_admin ? <div className="restricted-box">Somente o administrador pode alterar esta chave.</div> : <><label><span>Serviço de inteligência artificial <FieldHelp text="Nesta etapa o sistema está preparado para usar a OpenAI." /></span><select disabled><option>OpenAI</option></select></label><label><span>Chave de acesso da OpenAI <FieldHelp text="Crie a chave na área API Keys da plataforma OpenAI. Ela costuma começar com sk-proj-." /></span><input type="password" value={system.openai_api_key} onChange={(e) => setSystem({ ...system, openai_api_key: e.target.value })} placeholder={configured("OPENAI") ? "•••••••• configurada — digite para substituir" : "sk-proj-…"} autoComplete="new-password" /></label><div className="secret-note">Nenhuma análise ou cobrança será iniciada apenas por salvar a chave. Os prompts são internos e não aparecem neste painel.</div><button disabled={busy || !system.openai_api_key}>{busy ? "Salvando…" : "Salvar chave com segurança"}</button></>}
+      </form>}
+      {section === "general" && placeholder("Geral", "Preferências de idioma, fuso horário e exibição.")}
+      {section === "users" && placeholder("Usuários", "Convites, funções e permissões de acesso.")}
+      {section === "clients" && placeholder("Clientes", "Cadastro e organização dos clientes atendidos.")}
+      {section === "crm" && placeholder("CRM", "Conexões com ferramentas comerciais e atendimento.")}
+      {section === "webhooks" && placeholder("Webhooks", "Avisos automáticos enviados para outros sistemas.")}
+      {section === "api" && <div className="settings-card"><h2>API e serviços</h2><p>As credenciais técnicas são administradas no ambiente seguro da VPS e não aparecem no navegador.</p><div className="secret-note">Os prompts de análise também são configuração exclusiva dos desenvolvedores: não possuem formulário, endpoint público ou opção de edição no painel.</div></div>}
+      {section === "security" && <div className="settings-card"><h2>Segurança</h2><p>Segredos são criptografados e nunca retornam para a tela depois de salvos.</p><div className="security-list"><span>✓ Acesso separado por cliente</span><span>✓ Credenciais ocultas</span><span>✓ Prompts internos protegidos</span></div></div>}
+    </div></div>
   </section>;
 }
 

@@ -16,6 +16,7 @@ class MetaIntegrationWrite(BaseModel):
 class SystemCredentialsWrite(BaseModel):
     meta_app_id: str | None = Field(None, max_length=80)
     meta_app_secret: SecretStr | None = None
+    system_user_id: str | None = Field(None, max_length=80)
     graph_version: str = Field("v25.0", pattern=r"^v\d+\.\d+$")
     openai_api_key: SecretStr | None = None
 

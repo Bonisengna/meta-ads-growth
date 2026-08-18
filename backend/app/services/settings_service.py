@@ -47,6 +47,7 @@ class SettingsService:
             "account_name": account.get("name"),
             "currency": account.get("currency"),
             "timezone": account.get("timezone_name"),
+            "permissions": ["ads_read"],
         }
         row = self._upsert("META_CLIENT", payload.connection_name, token, config, payload.client_id)
         return self._safe_status(row)
@@ -59,7 +60,8 @@ class SettingsService:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Meta App ID é obrigatório.")
             saved.append(self._safe_status(self._upsert(
                 "META_SYSTEM", "Meta Application", payload.meta_app_secret.get_secret_value(),
-                {"meta_app_id": payload.meta_app_id, "graph_version": payload.graph_version}, None,
+                {"meta_app_id": payload.meta_app_id, "system_user_id": payload.system_user_id,
+                 "graph_version": payload.graph_version}, None,
             )))
         if payload.openai_api_key is not None:
             saved.append(self._safe_status(self._upsert(

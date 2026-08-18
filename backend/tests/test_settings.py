@@ -14,6 +14,15 @@ def test_secret_models_never_serialize_plaintext() -> None:
     assert "sk-proj-secret-value" not in system.model_dump_json()
 
 
+def test_system_user_id_is_safe_metadata() -> None:
+    system = SystemCredentialsWrite(
+        meta_app_id="123456789",
+        system_user_id="987654321",
+        graph_version="v25.0",
+    )
+    assert system.system_user_id == "987654321"
+
+
 def test_safe_status_excludes_vault_secret_fields() -> None:
     status = SettingsService._safe_status({
         "provider": "OPENAI", "secret_id": "hidden-id", "decrypted_secret": "hidden",
