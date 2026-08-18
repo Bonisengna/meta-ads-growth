@@ -12,6 +12,40 @@ const integer = new Intl.NumberFormat("pt-BR");
 const decimal = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 type Filters = { days: number; clientId: string; accountId: string; campaignId: string };
 type MainView = "dashboard" | "campaigns" | "analyses" | "settings";
+type IndicatorGuide = { title: string; meaning: string; direction: string; attention: string };
+
+const metricGuides: Partial<Record<keyof Metrics, IndicatorGuide>> = {
+  spend: { title: "Investimento", meaning: "Quanto foi gasto em mídia no período selecionado.", direction: "Não existe melhor ou pior isoladamente: compare o valor com os resultados gerados.", attention: "Investimento maior sem crescimento proporcional de leads ou conversas indica perda de eficiência." },
+  conversations: { title: "Conversas", meaning: "Quantidade de conversas atribuídas aos anúncios pela Meta.", direction: "Em geral, quanto mais conversas qualificadas, melhor.", attention: "Volume não garante qualidade. Compare com o atendimento e com as vendas no CRM." },
+  leads: { title: "Leads", meaning: "Cadastros ou contatos atribuídos às campanhas.", direction: "Quanto mais leads qualificados pelo mesmo investimento, melhor.", attention: "O valor influencia a eficiência, mas a qualidade do lead só pode ser confirmada após o atendimento." },
+  cpl: { title: "Custo por lead (CPL)", meaning: "Investimento dividido pela quantidade de leads.", direction: "Em geral, quanto menor, melhor — desde que a qualidade dos leads seja mantida.", attention: "Um CPL muito baixo pode trazer contatos menos preparados. Compare com agendamentos e vendas." },
+  link_ctr: { title: "CTR de link", meaning: "Percentual de impressões que gerou um clique no link.", direction: "Em geral, quanto maior, melhor: indica que mensagem e oferta despertaram interesse.", attention: "CTR alto com poucos leads pode apontar problema na página, na oferta ou na qualidade do tráfego." },
+  ctr: { title: "CTR", meaning: "Percentual de impressões que gerou algum clique no anúncio.", direction: "Em geral, quanto maior, melhor, mas o clique precisa levar a uma ação útil.", attention: "Para avaliar intenção, prefira o CTR de link ao CTR de todos os cliques." },
+  cpm: { title: "CPM", meaning: "Custo para exibir o anúncio mil vezes.", direction: "Quanto menor tende a ser melhor, mas não deve ser analisado sozinho.", attention: "CPM alto pode indicar concorrência, público pequeno, segmentação restrita ou desgaste do criativo." },
+  impressions: { title: "Impressões", meaning: "Número total de vezes que os anúncios foram exibidos, incluindo repetições.", direction: "Mais impressões ampliam a exposição, mas não garantem resultados.", attention: "Compare com alcance e frequência para entender quantas vezes cada pessoa viu o anúncio." },
+  reach: { title: "Alcance", meaning: "Quantidade estimada de pessoas únicas que viram os anúncios.", direction: "Maior alcance é útil quando o objetivo é encontrar novas pessoas.", attention: "Alcance alto com poucos cliques pode indicar criativo ou mensagem pouco atraente." },
+  link_clicks: { title: "Cliques no link", meaning: "Cliques que levaram a pessoa para o destino definido no anúncio.", direction: "Quanto mais cliques relevantes pelo mesmo custo, melhor.", attention: "Cliques sem leads podem revelar lentidão da página, oferta fraca ou público pouco qualificado." },
+  frequency: { title: "Frequência", meaning: "Média de vezes que cada pessoa viu os anúncios.", direction: "Não é simplesmente menor ou maior: precisa ficar em uma faixa saudável.", attention: "Acima de 3–4 em públicos frios pequenos pode indicar saturação; confirme junto com CTR e CPM." },
+};
+
+const chartGuides: Record<string, IndicatorGuide> = {
+  "Faixas etárias": { title: "Desempenho por idade", meaning: "Compara os resultados entre as faixas etárias alcançadas pela campanha.", direction: "Procure faixas com mais conversões e CPA menor.", attention: "Idade influencia o custo e a qualidade do lead. Não realoque verba sem volume suficiente de dados." },
+  "Gênero": { title: "Desempenho por gênero", meaning: "Compara investimento e resultado entre os gêneros informados pela Meta.", direction: "Melhor é o grupo que combina conversões consistentes e CPA sustentável.", attention: "Use como aprendizado de público, evitando conclusões com amostras pequenas." },
+  "Posicionamentos": { title: "Desempenho por posicionamento", meaning: "Mostra onde o anúncio apareceu, como Feed, Stories, Reels ou Marketplace.", direction: "Busque CPA menor e boa taxa de conversão, não apenas CPM barato.", attention: "Cada posicionamento exige um formato criativo adequado; Reels, por exemplo, favorece vídeo vertical." },
+  "Plataformas": { title: "Facebook x Instagram", meaning: "Compara a entrega e os resultados entre as plataformas da Meta.", direction: "A melhor plataforma é a que gera resultado qualificado com eficiência.", attention: "O comportamento pode variar por região, idade, renda e tipo de imóvel." },
+  "Dispositivos": { title: "Desempenho por dispositivo", meaning: "Compara a experiência de pessoas em celular e computador.", direction: "Procure maior taxa de conversão e menor CPA.", attention: "Muitos cliques mobile com poucos leads podem indicar página lenta ou formulário difícil no celular." },
+  "Regiões": { title: "Desempenho por região", meaning: "Mostra quais localidades concentram entrega e resultados.", direction: "Regiões com CPA menor e conversões recorrentes merecem atenção.", attention: "Não confunda poucos resultados baratos com tendência: valide volume e qualidade comercial." },
+  "Dias e horários": { title: "Dias e horários", meaning: "O mapa destaca quando as conversões aconteceram no fuso da conta Meta.", direction: "Células mais intensas representam mais resultados.", attention: "Use para entender comportamento. Alterar horários exige consistência histórica e avaliação do atendimento disponível." },
+};
+
+function IndicatorInfo({ guide, onClose }: { guide: IndicatorGuide; onClose: () => void }) {
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+  return <div className="indicator-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section role="dialog" aria-modal="true" aria-labelledby="indicator-title"><button className="modal-close" onClick={onClose} aria-label="Fechar explicação">×</button><p className="eyebrow coral">ENTENDA O INDICADOR</p><h2 id="indicator-title">{guide.title}</h2><div className="guide-block"><strong>O que significa</strong><p>{guide.meaning}</p></div><div className="guide-block good"><strong>Como interpretar</strong><p>{guide.direction}</p></div><div className="guide-block attention"><strong>O que observar</strong><p>{guide.attention}</p></div><small>Orientação educativa baseada em regras gerais. Não substitui a análise do contexto da campanha.</small></section></div>;
+}
 
 function friendlyDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
@@ -26,8 +60,10 @@ function metricValue(key: keyof Metrics, value: number | null | undefined) {
 }
 
 function MetricCard({ label, metricKey, metrics, change }: { label: string; metricKey: keyof Metrics; metrics: Metrics; change?: number | null }) {
+  const [showGuide, setShowGuide] = useState(false);
   const positive = change != null && change >= 0;
-  return <article className="metric-card"><span>{label}</span><strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={change == null ? "neutral" : positive ? "positive" : "negative"}>{change == null ? "sem base anterior" : `${positive ? "+" : ""}${decimal.format(change)}% vs. anterior`}</small></article>;
+  const guide = metricGuides[metricKey];
+  return <><article className={`metric-card${guide ? " explainable" : ""}`} onClick={() => guide && setShowGuide(true)}><span>{label}</span>{guide && <button className="info-button" aria-label={`Entenda ${label}`} onClick={(event) => { event.stopPropagation(); setShowGuide(true); }}>i</button>}<strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={change == null ? "neutral" : positive ? "positive" : "negative"}>{change == null ? "sem base anterior" : `${positive ? "+" : ""}${decimal.format(change)}% vs. anterior`}</small>{guide && <em>Toque para entender</em>}</article>{showGuide && guide && <IndicatorInfo guide={guide} onClose={() => setShowGuide(false)} />}</>;
 }
 
 function RankingTable({ title, items }: { title: string; items: EntityPerformance[] }) {
@@ -47,16 +83,19 @@ const dimensionLabels: Record<string, string> = {
 };
 
 function BreakdownChart({ title, subtitle, points }: { title: string; subtitle: string; points: BreakdownPoint[] }) {
+  const [showGuide, setShowGuide] = useState(false);
   const ranked = [...points].sort((a, b) => (b.leads + b.conversations) - (a.leads + a.conversations)).slice(0, 8);
   const maximum = Math.max(...ranked.map((item) => item.leads + item.conversations), 1);
-  return <article className="panel breakdown-chart"><div className="panel-title"><div><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div><span>{points.length} segmentos</span></div>{ranked.length === 0 ? <div className="chart-empty">Aguardando a próxima sincronização analítica.</div> : <div className="horizontal-chart">{ranked.map((item) => { const conversions = item.leads + item.conversations; return <div className="chart-row" key={item.value}><div className="chart-label"><strong>{dimensionLabels[item.value] ?? item.value}</strong><small>{conversions} resultados · CPA {item.cpa == null ? "—" : currency.format(item.cpa)}</small></div><div className="chart-track"><i style={{ width: `${Math.max((conversions / maximum) * 100, conversions ? 5 : 0)}%` }} /></div><span>{item.conversion_rate == null ? "—" : `${decimal.format(item.conversion_rate)}%`}</span></div>; })}</div>}</article>;
+  const guide = chartGuides[title];
+  return <><article className="panel breakdown-chart"><div className="panel-title"><div><p className="eyebrow">{subtitle}</p><h2>{title} <button className="info-button" aria-label={`Entenda o gráfico ${title}`} onClick={() => setShowGuide(true)}>i</button></h2></div><span>{points.length} segmentos</span></div>{ranked.length === 0 ? <div className="chart-empty">Aguardando a próxima sincronização analítica.</div> : <div className="horizontal-chart">{ranked.map((item) => { const conversions = item.leads + item.conversations; return <div className="chart-row" key={item.value}><div className="chart-label"><strong>{dimensionLabels[item.value] ?? item.value}</strong><small>{conversions} resultados · CPA {item.cpa == null ? "—" : currency.format(item.cpa)}</small></div><div className="chart-track"><i style={{ width: `${Math.max((conversions / maximum) * 100, conversions ? 5 : 0)}%` }} /></div><span>{item.conversion_rate == null ? "—" : `${decimal.format(item.conversion_rate)}%`}</span></div>; })}</div>}</article>{showGuide && guide && <IndicatorInfo guide={guide} onClose={() => setShowGuide(false)} />}</>;
 }
 
 function TimeHeatmap({ points }: { points: BreakdownPoint[] }) {
+  const [showGuide, setShowGuide] = useState(false);
   const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
   const lookup = new Map(points.map((item) => [item.value, item.leads + item.conversations]));
   const maximum = Math.max(...lookup.values(), 1);
-  return <article className="panel heatmap-panel"><div className="panel-title"><div><p className="eyebrow">COMPORTAMENTO DO PÚBLICO</p><h2>Dias e horários</h2></div><span>Fuso da conta Meta</span></div>{points.length === 0 ? <div className="chart-empty">Aguardando dados por hora.</div> : <div className="heatmap-wrap"><div className="heatmap-hours">{Array.from({ length: 24 }, (_, hour) => <span key={hour}>{hour % 3 === 0 ? `${hour}h` : ""}</span>)}</div>{days.map((day, weekday) => <div className="heatmap-row" key={day}><strong>{day}</strong><div>{Array.from({ length: 24 }, (_, hour) => { const value = lookup.get(`${weekday}|${String(hour).padStart(2, "0")}`) ?? 0; return <i key={hour} title={`${day}, ${hour}h: ${value} resultados`} style={{ opacity: value ? Math.max(value / maximum, .18) : .05 }} />; })}</div></div>)}</div>}</article>;
+  return <><article className="panel heatmap-panel"><div className="panel-title"><div><p className="eyebrow">COMPORTAMENTO DO PÚBLICO</p><h2>Dias e horários <button className="info-button" aria-label="Entenda o gráfico de dias e horários" onClick={() => setShowGuide(true)}>i</button></h2></div><span>Fuso da conta Meta</span></div>{points.length === 0 ? <div className="chart-empty">Aguardando dados por hora.</div> : <div className="heatmap-wrap"><div className="heatmap-hours">{Array.from({ length: 24 }, (_, hour) => <span key={hour}>{hour % 3 === 0 ? `${hour}h` : ""}</span>)}</div>{days.map((day, weekday) => <div className="heatmap-row" key={day}><strong>{day}</strong><div>{Array.from({ length: 24 }, (_, hour) => { const value = lookup.get(`${weekday}|${String(hour).padStart(2, "0")}`) ?? 0; return <i key={hour} title={`${day}, ${hour}h: ${value} resultados`} style={{ opacity: value ? Math.max(value / maximum, .18) : .05 }} />; })}</div></div>)}</div>}</article>{showGuide && <IndicatorInfo guide={chartGuides["Dias e horários"]} onClose={() => setShowGuide(false)} />}</>;
 }
 
 type SettingsSection = "general" | "users" | "clients" | "meta" | "ai" | "crm" | "webhooks" | "meta-app" | "api" | "security";
