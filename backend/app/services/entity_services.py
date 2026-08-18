@@ -382,7 +382,7 @@ class DashboardService:
         while True:
             response = (
                 self.client.table("campaign_metrics")
-                .select("spend,impressions,clicks,leads,conversations")
+                .select("spend,impressions,reach,clicks,link_clicks,leads,conversations")
                 .gte("metric_date", date_from.isoformat())
                 .lte("metric_date", date_to.isoformat())
                 .in_("campaign_id", campaign_ids)
@@ -411,7 +411,7 @@ class DashboardService:
                 response = (
                     self.client.table("campaign_metrics")
                     .select(
-                        "campaign_id,metric_date,spend,impressions,clicks,leads,conversations"
+                        "campaign_id,metric_date,spend,impressions,reach,clicks,link_clicks,leads,conversations"
                     )
                     .gte("metric_date", date_from.isoformat())
                     .lte("metric_date", date_to.isoformat())
@@ -559,19 +559,25 @@ def period_payload(date_from: date, date_to: date) -> dict[str, object]:
 def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
     spend = sum((Decimal(str(row.get("spend") or 0)) for row in rows), Decimal("0"))
     impressions = sum(int(row.get("impressions") or 0) for row in rows)
+    reach = sum(int(row.get("reach") or 0) for row in rows)
     clicks = sum(int(row.get("clicks") or 0) for row in rows)
+    link_clicks = sum(int(row.get("link_clicks") or 0) for row in rows)
     leads = sum(int(row.get("leads") or 0) for row in rows)
     conversations = sum(int(row.get("conversations") or 0) for row in rows)
     return {
         "spend": spend,
         "impressions": impressions,
+        "reach": reach,
         "clicks": clicks,
+        "link_clicks": link_clicks,
         "leads": leads,
         "conversations": conversations,
         "cpl": safe_divide(spend, Decimal(leads)),
         "ctr": safe_divide(Decimal(clicks) * 100, Decimal(impressions)),
         "cpc": safe_divide(spend, Decimal(clicks)),
         "cpm": safe_divide(spend * 1000, Decimal(impressions)),
+        "link_ctr": safe_divide(Decimal(link_clicks) * 100, Decimal(impressions)),
+        "frequency": safe_divide(Decimal(impressions), Decimal(reach)),
     }
 
 
@@ -583,13 +589,17 @@ def compare_metrics(
         for key in (
             "spend",
             "impressions",
+            "reach",
             "clicks",
+            "link_clicks",
             "leads",
             "conversations",
             "cpl",
             "ctr",
             "cpc",
             "cpm",
+            "link_ctr",
+            "frequency",
         )
     }
 

@@ -173,7 +173,8 @@ def test_dashboard_serializes_money_as_json_number() -> None:
         "ads": [{"id": "55555555-5555-5555-5555-555555555555", "adset_id": adset_id}],
         "campaign_metrics": [{
             "campaign_id": campaign_id, "metric_date": metric_date,
-            "spend": "12.50", "impressions": 1000, "clicks": 25,
+            "spend": "12.50", "impressions": 1000, "reach": 800, "clicks": 25,
+            "link_clicks": 20,
             "leads": 1, "conversations": 2,
         }],
     })
@@ -183,8 +184,10 @@ def test_dashboard_serializes_money_as_json_number() -> None:
 
     assert response.status_code == 200
     assert response.json()["metrics"] == {
-        "spend": 12.5, "impressions": 1000, "clicks": 25, "leads": 1,
-        "conversations": 2, "cpl": 12.5, "ctr": 2.5, "cpc": 0.5, "cpm": 12.5,
+        "spend": 12.5, "impressions": 1000, "reach": 800, "clicks": 25,
+        "link_clicks": 20, "leads": 1, "conversations": 2, "cpl": 12.5,
+        "ctr": 2.5, "cpc": 0.5, "cpm": 12.5, "link_ctr": 2.0,
+        "frequency": 1.25,
     }
 
 

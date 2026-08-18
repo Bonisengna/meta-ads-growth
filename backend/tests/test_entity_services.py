@@ -112,14 +112,18 @@ def test_period_rejects_incomplete_or_reversed_dates() -> None:
 
 def test_aggregate_calculates_business_metrics() -> None:
     result = aggregate_metrics([
-        {"spend": "30", "impressions": 1000, "clicks": 50, "leads": 2, "conversations": 3},
-        {"spend": "15", "impressions": 500, "clicks": 10, "leads": 1, "conversations": 1},
+        {"spend": "30", "impressions": 1000, "reach": 800, "clicks": 50,
+         "link_clicks": 40, "leads": 2, "conversations": 3},
+        {"spend": "15", "impressions": 500, "reach": 400, "clicks": 10,
+         "link_clicks": 5, "leads": 1, "conversations": 1},
     ])
     assert result == {
-        "spend": Decimal("45"), "impressions": 1500, "clicks": 60,
+        "spend": Decimal("45"), "impressions": 1500, "reach": 1200,
+        "clicks": 60, "link_clicks": 45,
         "leads": 3, "conversations": 4, "cpl": Decimal("15.000000"),
         "ctr": Decimal("4.000000"), "cpc": Decimal("0.750000"),
-        "cpm": Decimal("30.000000"),
+        "cpm": Decimal("30.000000"), "link_ctr": Decimal("3.000000"),
+        "frequency": Decimal("1.250000"),
     }
 
 

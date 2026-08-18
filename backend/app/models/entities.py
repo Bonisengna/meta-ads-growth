@@ -89,15 +89,19 @@ class Page(ApiModel, Generic[T]):
 class DashboardMetrics(ApiModel):
     spend: Decimal = Field(Decimal("0"), ge=0, max_digits=14, decimal_places=2, examples=[0.0])
     impressions: int = 0
+    reach: int = 0
     clicks: int = 0
+    link_clicks: int = 0
     leads: int = 0
     conversations: int = 0
     cpl: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6, examples=[12.5])
     ctr: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=6)
     cpc: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6)
     cpm: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6)
+    link_ctr: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=6)
+    frequency: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=6)
 
-    @field_serializer("spend", "cpl", "ctr", "cpc", "cpm", when_used="json")
+    @field_serializer("spend", "cpl", "ctr", "cpc", "cpm", "link_ctr", "frequency", when_used="json")
     def serialize_money(self, value: Decimal | None) -> float | None:
         return float(value) if value is not None else None
 
@@ -111,13 +115,17 @@ class DatePeriod(ApiModel):
 class MetricsComparison(ApiModel):
     spend: Decimal | None = None
     impressions: Decimal | None = None
+    reach: Decimal | None = None
     clicks: Decimal | None = None
+    link_clicks: Decimal | None = None
     leads: Decimal | None = None
     conversations: Decimal | None = None
     cpl: Decimal | None = None
     ctr: Decimal | None = None
     cpc: Decimal | None = None
     cpm: Decimal | None = None
+    link_ctr: Decimal | None = None
+    frequency: Decimal | None = None
 
     @field_serializer("*", when_used="json")
     def serialize_percent(self, value: Decimal | None) -> float | None:
