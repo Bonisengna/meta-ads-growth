@@ -11,5 +11,11 @@ export type Dashboard = {
   metrics: Metrics; previous_metrics: Metrics; change_percent: Record<keyof Metrics, number | null>;
   daily_series: Array<{ metric_date: string; spend: number; impressions: number; clicks: number; leads: number; conversations: number }>;
   campaign_ranking: Array<{ campaign_id: string; name: string; status: EntityStatus; spend: number; impressions: number; clicks: number; leads: number; conversations: number; cpl: number | null; ctr: number | null; cpc: number | null; cost_per_conversation: number | null }>;
+  adset_ranking: EntityPerformance[];
+  ad_ranking: EntityPerformance[];
   insights: Array<{ code: string; severity: "INFO" | "WARNING" | "OPPORTUNITY"; title: string; message: string }>;
+  recommendations: Recommendation[];
 };
+export type EntityPerformance = { entity_type: "ADSET" | "AD"; entity_id: string; name: string; status: EntityStatus; spend: number; impressions: number; clicks: number; leads: number; conversations: number; ctr: number | null; cpc: number | null; cost_per_conversation: number | null };
+export type Recommendation = { key: string; entity_type: "ADSET" | "AD"; entity_id: string; entity_name: string; rule_code: string; priority: "HIGH" | "MEDIUM" | "LOW"; title: string; explanation: string; evidence: string; expected_impact: string; status: "PENDING" | "ACCEPTED" | "REJECTED" };
+export type Improvement = { id: string; title: string; hypothesis: string | null; status: string; metric_name: string | null; before_value: number | null; after_value: number | null; result: string | null; conclusion: string | null; created_at: string };

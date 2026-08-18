@@ -238,8 +238,15 @@ class DashboardService:
         current_metrics = self._aggregate(current[0], current[1], scope["campaign_ids"])
         previous_metrics = self._aggregate(previous[0], previous[1], scope["campaign_ids"])
         analytics = self._analytics(
-            current[0], current[1], scope["campaign_ids"], scope["campaign_rows"]
+            current[0], current[1], scope
         )
+
+        recommendations = build_recommendations(
+            analytics["adset_ranking"], analytics["ad_ranking"]
+        )
+        decided = self._decision_statuses([str(item["key"]) for item in recommendations])
+        for item in recommendations:
+            item["status"] = decided.get(str(item["key"]), "PENDING")
 
         return {
             "clients": scope["clients"],
@@ -254,8 +261,28 @@ class DashboardService:
             "change_percent": compare_metrics(current_metrics, previous_metrics),
             "daily_series": analytics["daily_series"],
             "campaign_ranking": analytics["campaign_ranking"],
+            "adset_ranking": analytics["adset_ranking"],
+            "ad_ranking": analytics["ad_ranking"],
             "insights": build_insights(current_metrics, previous_metrics),
+            "recommendations": recommendations,
         }
+
+    def _decision_statuses(self, keys: list[str]) -> dict[str, str]:
+        if not keys:
+            return {}
+        response = (
+            self.client.table("recommendations")
+            .select("recommendation_key,status,decided_at")
+            .in_("recommendation_key", keys)
+            .order("decided_at", desc=True)
+            .execute()
+        )
+        statuses: dict[str, str] = {}
+        for row in response.data or []:
+            key = str(row.get("recommendation_key") or "")
+            if key and key not in statuses:
+                statuses[key] = str(row["status"])
+        return statuses
 
     def _scope(
         self,
@@ -314,20 +341,24 @@ class DashboardService:
             }
             client_ids = [value for value in client_ids if value in scoped_client_ids]
 
-        adset_query = self.client.table("adsets").select("id,campaign_id")
+        adset_query = self.client.table("adsets").select("id,campaign_id,name,status")
         if campaign_ids:
-            adset_ids = row_ids(adset_query.in_("campaign_id", campaign_ids).execute().data)
+            adset_rows = adset_query.in_("campaign_id", campaign_ids).execute().data or []
+            adset_ids = row_ids(adset_rows)
         else:
+            adset_rows = []
             adset_ids = []
         ads = 0
+        ad_rows: list[dict[str, object]] = []
         if adset_ids:
             response = (
                 self.client.table("ads")
-                .select("id", count="exact", head=True)
+                .select("id,adset_id,name,status", count="exact")
                 .in_("adset_id", adset_ids)
                 .execute()
             )
             ads = response.count or 0
+            ad_rows = response.data or []
 
         return {
             "clients": len(client_ids),
@@ -335,6 +366,8 @@ class DashboardService:
             "campaign_ids": campaign_ids,
             "campaign_rows": campaign_rows,
             "adset_ids": adset_ids,
+            "adset_rows": adset_rows,
+            "ad_rows": ad_rows,
             "ads": ads,
         }
 
@@ -367,9 +400,10 @@ class DashboardService:
         self,
         date_from: date,
         date_to: date,
-        campaign_ids: list[str],
-        campaign_rows: list[dict[str, object]],
+        scope: dict[str, object],
     ) -> dict[str, object]:
+        campaign_ids = scope["campaign_ids"]
+        campaign_rows = scope["campaign_rows"]
         rows: list[dict[str, object]] = []
         if campaign_ids:
             offset = 0
@@ -427,7 +461,57 @@ class DashboardService:
                 }
             )
         ranking.sort(key=lambda row: Decimal(str(row["spend"])), reverse=True)
-        return {"daily_series": daily_series, "campaign_ranking": ranking}
+        adset_ranking = self._entity_ranking(
+            "adset_metrics", "adset_id", "ADSET", date_from, date_to,
+            scope["adset_ids"], scope["adset_rows"]
+        )
+        ad_ids = row_ids(scope["ad_rows"])
+        ad_ranking = self._entity_ranking(
+            "ad_metrics", "ad_id", "AD", date_from, date_to, ad_ids, scope["ad_rows"]
+        )
+        return {
+            "daily_series": daily_series,
+            "campaign_ranking": ranking,
+            "adset_ranking": adset_ranking,
+            "ad_ranking": ad_ranking,
+        }
+
+    def _entity_ranking(
+        self, table: str, id_column: str, entity_type: str, date_from: date,
+        date_to: date, entity_ids: list[str], entity_rows: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        if not entity_ids:
+            return []
+        response = (
+            self.client.table(table)
+            .select(f"{id_column},spend,impressions,clicks,leads,conversations")
+            .gte("metric_date", date_from.isoformat())
+            .lte("metric_date", date_to.isoformat())
+            .in_(id_column, entity_ids)
+            .execute()
+        )
+        grouped: dict[str, list[dict[str, object]]] = {}
+        for row in response.data or []:
+            grouped.setdefault(str(row[id_column]), []).append(row)
+        entities = {str(row["id"]): row for row in entity_rows}
+        ranking = []
+        for entity_id, rows in grouped.items():
+            metrics = aggregate_metrics(rows)
+            entity = entities.get(entity_id, {})
+            ranking.append({
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "name": entity.get("name") or "Entidade sem nome",
+                "status": entity.get("status") or "ARCHIVED",
+                **metrics,
+                "cost_per_conversation": safe_divide(
+                    Decimal(str(metrics["spend"])), Decimal(str(metrics["conversations"]))
+                ),
+            })
+        ranking.sort(key=lambda row: (
+            int(row["conversations"]), Decimal(str(row["spend"]))
+        ), reverse=True)
+        return ranking[:10]
 
 
 def page_range(page: int, page_size: int) -> tuple[int, int]:
@@ -574,6 +658,123 @@ def build_insights(
             }
         )
     return insights
+
+
+def build_recommendations(
+    adsets: list[dict[str, object]], ads: list[dict[str, object]]
+) -> list[dict[str, object]]:
+    recommendations: list[dict[str, object]] = []
+    for row in [*adsets, *ads]:
+        spend = Decimal(str(row.get("spend") or 0))
+        impressions = int(row.get("impressions") or 0)
+        conversations = int(row.get("conversations") or 0)
+        ctr = row.get("ctr")
+        rules: list[tuple[str, str, str, str, str]] = []
+        if spend >= Decimal("20") and conversations == 0:
+            rules.append((
+                "SPEND_WITHOUT_CONVERSATION", "HIGH", "Revisar entrega sem conversas",
+                f"Houve {spend:.2f} de investimento sem conversas atribuídas.",
+                "Reduzir desperdício após revisão humana de criativo, público e rastreamento.",
+            ))
+        if impressions >= 1000 and ctr is not None and Decimal(str(ctr)) < Decimal("1"):
+            rules.append((
+                "LOW_CTR", "MEDIUM", "Testar nova abordagem criativa",
+                f"O CTR foi {Decimal(str(ctr)):.2f}% em {impressions} impressões.",
+                "Aumentar a taxa de cliques com uma nova hipótese de mensagem ou criativo.",
+            ))
+        for rule_code, priority, title, evidence, impact in rules:
+            entity_type = str(row["entity_type"])
+            entity_id = str(row["entity_id"])
+            recommendations.append({
+                "key": f"{entity_type.lower()}:{entity_id}:{rule_code.lower()}",
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "entity_name": row["name"],
+                "rule_code": rule_code,
+                "priority": priority,
+                "title": title,
+                "explanation": "A regra compara volume, investimento e resultado do período selecionado.",
+                "evidence": evidence,
+                "expected_impact": impact,
+                "status": "PENDING",
+            })
+    priority_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    recommendations.sort(key=lambda row: priority_order[str(row["priority"])])
+    return recommendations[:12]
+
+
+class RecommendationService:
+    def __init__(self, client: Client) -> None:
+        self.client = client
+
+    def decide(self, payload: dict[str, object]) -> dict[str, object]:
+        if payload["period_from"] > payload["period_to"]:
+            raise ValueError("period_from não pode ser posterior a period_to")
+        entity_type = str(payload["entity_type"])
+        if payload["rule_code"] not in {"SPEND_WITHOUT_CONVERSATION", "LOW_CTR"}:
+            raise ValueError("Regra de recomendação desconhecida")
+        expected_key = (
+            f"{entity_type.lower()}:{payload['entity_id']}:{str(payload['rule_code']).lower()}"
+        )
+        if payload["key"] != expected_key:
+            raise ValueError("Chave da recomendação não corresponde à entidade e à regra")
+        entity_column = "adset_id" if entity_type == "ADSET" else "ad_id"
+        analysis = {
+            entity_column: str(payload["entity_id"]),
+            "period_start": str(payload["period_from"]),
+            "period_end": str(payload["period_to"]),
+            "analysis_type": "RULE_BASED",
+            "problem": payload["title"],
+            "possible_causes": payload["evidence"],
+            "summary": payload["explanation"],
+            "priority": payload["priority"],
+            "rating": 1,
+            "model": "deterministic-rules-v1",
+            "prompt_version": "rules-v1",
+        }
+        analysis_response = self.client.table("ai_analyses").insert(analysis).execute()
+        analysis_id = analysis_response.data[0]["id"]
+        recommendation = {
+            "analysis_id": analysis_id,
+            "recommendation_key": payload["key"],
+            "rule_code": payload["rule_code"],
+            "title": payload["title"],
+            "description": payload["explanation"],
+            "action_type": "REVIEW",
+            "priority": payload["priority"],
+            "expected_impact": payload["expected_impact"],
+            "status": payload["status"],
+            "decision_note": payload.get("note"),
+        }
+        response = self.client.table("recommendations").insert(recommendation).execute()
+        row = response.data[0]
+        if payload["status"] == "ACCEPTED":
+            self.client.table("improvements").insert({
+                "recommendation_id": row["id"],
+                entity_column: str(payload["entity_id"]),
+                "title": payload["title"],
+                "hypothesis": payload["expected_impact"],
+                "description": "Acompanhamento aprovado; nenhuma alteração foi enviada à Meta.",
+                "status": "PLANNED",
+            }).execute()
+        return {
+            "id": row["id"], "key": payload["key"], "status": payload["status"],
+            "decided_at": row["decided_at"],
+        }
+
+    def list_improvements(self, page: int, page_size: int) -> dict[str, object]:
+        response = (
+            self.client.table("improvements")
+            .select(
+                "id,recommendation_id,campaign_id,adset_id,ad_id,title,hypothesis,status,"
+                "metric_name,before_value,after_value,result,conclusion,created_at",
+                count="exact",
+            )
+            .order("created_at", desc=True)
+            .range(*page_range(page, page_size))
+            .execute()
+        )
+        return page_result(response.data, response.count, page, page_size)
 
 
 def percent_change(current: object, previous: object) -> Decimal | None:

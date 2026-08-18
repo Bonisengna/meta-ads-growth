@@ -137,7 +137,10 @@ class DashboardRead(ApiModel):
     change_percent: MetricsComparison
     daily_series: list["DailyMetricPoint"]
     campaign_ranking: list["CampaignPerformance"]
+    adset_ranking: list["EntityPerformance"]
+    ad_ranking: list["EntityPerformance"]
     insights: list["PerformanceInsight"]
+    recommendations: list["RecommendationRead"]
 
 
 class DailyMetricPoint(ApiModel):
@@ -177,6 +180,80 @@ class PerformanceInsight(ApiModel):
     severity: Literal["INFO", "WARNING", "OPPORTUNITY"]
     title: str
     message: str
+
+
+class EntityPerformance(ApiModel):
+    entity_type: Literal["ADSET", "AD"]
+    entity_id: UUID
+    name: str
+    status: EntityStatus
+    spend: Decimal
+    impressions: int
+    clicks: int
+    leads: int
+    conversations: int
+    ctr: Decimal | None = None
+    cpc: Decimal | None = None
+    cost_per_conversation: Decimal | None = None
+
+    @field_serializer("spend", "ctr", "cpc", "cost_per_conversation", when_used="json")
+    def serialize_decimal(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class RecommendationRead(ApiModel):
+    key: str
+    entity_type: Literal["ADSET", "AD"]
+    entity_id: UUID
+    entity_name: str
+    rule_code: str
+    priority: Literal["HIGH", "MEDIUM", "LOW"]
+    title: str
+    explanation: str
+    evidence: str
+    expected_impact: str
+    status: Literal["PENDING", "ACCEPTED", "REJECTED"] = "PENDING"
+
+
+class RecommendationDecision(ApiModel):
+    key: str
+    entity_type: Literal["ADSET", "AD"]
+    entity_id: UUID
+    entity_name: str = Field(min_length=1, max_length=255)
+    rule_code: str = Field(min_length=1, max_length=80)
+    priority: Literal["HIGH", "MEDIUM", "LOW"]
+    title: str = Field(min_length=1, max_length=255)
+    explanation: str = Field(min_length=1, max_length=2000)
+    evidence: str = Field(min_length=1, max_length=1000)
+    expected_impact: str = Field(min_length=1, max_length=1000)
+    status: Literal["ACCEPTED", "REJECTED"]
+    note: str | None = Field(None, max_length=1000)
+    period_from: date
+    period_to: date
+
+
+class RecommendationDecisionRead(ApiModel):
+    id: UUID
+    key: str
+    status: Literal["ACCEPTED", "REJECTED"]
+    decided_at: datetime
+
+
+class ImprovementRead(ApiModel):
+    id: UUID
+    recommendation_id: UUID | None = None
+    campaign_id: UUID | None = None
+    adset_id: UUID | None = None
+    ad_id: UUID | None = None
+    title: str
+    hypothesis: str | None = None
+    status: str
+    metric_name: str | None = None
+    before_value: Decimal | None = None
+    after_value: Decimal | None = None
+    result: str | None = None
+    conclusion: str | None = None
+    created_at: datetime
 
 
 class BaseMetricRead(ApiModel):

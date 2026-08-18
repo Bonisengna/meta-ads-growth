@@ -2,9 +2,9 @@
 
 import type { Session } from "@supabase/supabase-js";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiGet, query } from "@/lib/api";
+import { apiGet, apiPost, query } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
-import type { Campaign, Client, Dashboard, MetaAccount, Metrics, Page } from "@/lib/types";
+import type { Campaign, Client, Dashboard, EntityPerformance, Improvement, MetaAccount, Metrics, Page, Recommendation } from "@/lib/types";
 
 const periods = [7, 14, 30, 90, 120] as const;
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -24,6 +24,10 @@ function MetricCard({ label, metricKey, metrics, change }: { label: string; metr
   return <article className="metric-card"><span>{label}</span><strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={change === null ? "neutral" : positive ? "positive" : "negative"}>{change === null ? "sem base anterior" : `${positive ? "+" : ""}${decimal.format(change)}% vs. anterior`}</small></article>;
 }
 
+function RankingTable({ title, items }: { title: string; items: EntityPerformance[] }) {
+  return <article className="panel table-panel"><div className="panel-title"><div><p className="eyebrow">RANKING DE PERFORMANCE</p><h2>{title}</h2></div><span>{items.length} com entrega</span></div><div className="table-wrap"><table><thead><tr><th>Nome</th><th>Investimento</th><th>Conversas</th><th>CTR</th><th>Custo/conversa</th></tr></thead><tbody>{items.map((item) => <tr key={item.entity_id}><td>{item.name}</td><td>{currency.format(item.spend)}</td><td>{integer.format(item.conversations)}</td><td>{item.ctr === null ? "—" : `${decimal.format(item.ctr)}%`}</td><td>{item.cost_per_conversation === null ? "—" : currency.format(item.cost_per_conversation)}</td></tr>)}</tbody></table></div></article>;
+}
+
 export default function Home() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [session, setSession] = useState<Session | null>(null);
@@ -36,8 +40,10 @@ export default function Home() {
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [improvements, setImprovements] = useState<Improvement[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [decisions, setDecisions] = useState<Record<string, "ACCEPTED" | "REJECTED">>({});
   const initialLoadStarted = useRef(false);
 
   useEffect(() => {
@@ -51,13 +57,14 @@ export default function Home() {
     setLoading(true); setError("");
     try {
       const token = session.access_token;
-      const [clientPage, accountPage, campaignPage, dashboardData] = await Promise.all([
+      const [clientPage, accountPage, campaignPage, dashboardData, improvementPage] = await Promise.all([
         apiGet<Page<Client>>("/api/v1/clients?page=1&page_size=100", token),
         apiGet<Page<MetaAccount>>(`/api/v1/meta-accounts?${query({ page: 1, page_size: 100, client_id: filters.clientId })}`, token),
         apiGet<Page<Campaign>>(`/api/v1/campaigns?${query({ page: 1, page_size: 100, meta_account_id: filters.accountId })}`, token),
         apiGet<Dashboard>(`/api/v1/dashboard?${query({ days: filters.days, client_id: filters.clientId, meta_account_id: filters.accountId, campaign_id: filters.campaignId })}`, token),
+        apiGet<Page<Improvement>>("/api/v1/improvements?page=1&page_size=20", token),
       ]);
-      setClients(clientPage.items); setAccounts(accountPage.items); setCampaigns(campaignPage.items); setDashboard(dashboardData);
+      setClients(clientPage.items); setAccounts(accountPage.items); setCampaigns(campaignPage.items); setDashboard(dashboardData); setImprovements(improvementPage.items);
     } catch (cause) {
       if (cause instanceof Error && cause.message === "SESSION_EXPIRED") { await supabase.auth.signOut(); setAuthError("Sua sessão expirou. Entre novamente."); }
       else setError(cause instanceof Error ? cause.message : "Não foi possível carregar o dashboard.");
@@ -81,6 +88,19 @@ export default function Home() {
     if (signInError) setAuthError("E-mail ou senha inválidos.");
   }
 
+  async function decide(item: Recommendation, status: "ACCEPTED" | "REJECTED") {
+    if (!session?.access_token || !dashboard) return;
+    setError("");
+    try {
+      await apiPost("/api/v1/recommendations/decision", session.access_token, {
+        ...item, status, note: null,
+        period_from: dashboard.period.date_from, period_to: dashboard.period.date_to,
+      });
+      setDecisions((current) => ({ ...current, [item.key]: status }));
+      if (status === "ACCEPTED") await loadData();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível registrar a decisão."); }
+  }
+
   if (!isSupabaseConfigured) return <main className="center-screen"><div className="brand-mark">D</div><h2>Frontend ainda não configurado</h2><p>Crie o arquivo <code>.env.local</code> conforme o README.</p></main>;
   if (!authReady) return <main className="center-screen"><div className="spinner" /><p>Preparando seu painel…</p></main>;
   if (!session) return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Decisões melhores começam com números claros.</h1><p>Campanhas, comparações e sinais de desempenho em um só lugar — sem alterar nada na Meta.</p><div className="trust-line"><i /> Dados protegidos por usuário e cliente</div></section><section className="login-panel"><form onSubmit={signIn}><div><p className="eyebrow coral">ACESSO SEGURO</p><h2>Bem-vinda de volta</h2><p>Use o usuário criado no Supabase.</p></div><label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label><label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" /></label>{authError && <p className="form-error">{authError}</p>}<button type="submit">Entrar no painel <span>→</span></button><small>O token permanece na sessão do navegador e nunca é exibido.</small></form></section></main>;
@@ -94,6 +114,9 @@ export default function Home() {
         <section className="content-grid"><article className="panel"><div className="panel-title"><div><p className="eyebrow">EVOLUÇÃO DIÁRIA</p><h2>Investimento por dia</h2></div><span className="pill">{dashboard.daily_series.length} dias</span></div><div className="bars">{dashboard.daily_series.map((point) => { const maximum = Math.max(...dashboard.daily_series.map((item) => item.spend), 1); return <div className="bar-column" key={point.metric_date} title={`${point.metric_date}: ${currency.format(point.spend)}`}><div style={{ height: `${Math.max((point.spend / maximum) * 100, point.spend ? 4 : 0)}%` }} /><small>{point.metric_date.slice(5)}</small></div>; })}</div></article><article className="panel insights-panel"><p className="eyebrow">DIAGNÓSTICO POR REGRAS</p><h2>Sinais do período</h2><div className="insight-list">{dashboard.insights.map((insight) => <div className={`insight ${insight.severity.toLowerCase()}`} key={insight.code}><strong>{insight.title}</strong><p>{insight.message}</p></div>)}</div><small>Nenhuma ação é executada automaticamente.</small></article></section>
         <section className="content-grid"><article className="panel structure-panel"><div className="panel-title"><div><p className="eyebrow">ESTRUTURA IMPORTADA</p><h2>Conta em números</h2></div><span className="pill">Somente leitura</span></div><div className="structure-flow">{[[dashboard.clients,"Clientes"],[dashboard.meta_accounts,"Contas"],[dashboard.campaigns,"Campanhas"],[dashboard.adsets,"Conjuntos"],[dashboard.ads,"Anúncios"]].map(([value,label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></article><article className="panel signal-panel"><p className="eyebrow">LEITURA RÁPIDA</p><h2>Sinal do período</h2><div className="signal"><span>{dashboard.metrics.conversations > 0 ? "↗" : "—"}</span><div><strong>{dashboard.metrics.conversations > 0 ? `${dashboard.metrics.conversations} conversas registradas` : "Sem conversões no período"}</strong><p>{dashboard.metrics.conversations > 0 ? `Custo médio de ${currency.format(dashboard.metrics.spend / dashboard.metrics.conversations)} por conversa.` : "Amplie o período ou revise a coleta antes de concluir."}</p></div></div><small>Interpretação determinística. IA entra na próxima entrega.</small></article></section>
         <section className="panel table-panel"><div className="panel-title"><div><p className="eyebrow">RANKING</p><h2>Campanhas por investimento</h2></div><span>{dashboard.campaign_ranking.length} com entrega</span></div><div className="table-wrap"><table><thead><tr><th>Campanha</th><th>Investimento</th><th>Conversas</th><th>CTR</th><th>Custo/conversa</th></tr></thead><tbody>{dashboard.campaign_ranking.map((campaign) => <tr key={campaign.campaign_id}><td>{campaign.name}</td><td>{currency.format(campaign.spend)}</td><td>{integer.format(campaign.conversations)}</td><td>{campaign.ctr === null ? "—" : `${decimal.format(campaign.ctr)}%`}</td><td>{campaign.cost_per_conversation === null ? "—" : currency.format(campaign.cost_per_conversation)}</td></tr>)}</tbody></table></div></section>
+        <section className="ranking-grid"><RankingTable title="Conjuntos" items={dashboard.adset_ranking} /><RankingTable title="Anúncios" items={dashboard.ad_ranking} /></section>
+        <section className="panel recommendations-panel"><div className="panel-title"><div><p className="eyebrow">DECISÕES ASSISTIDAS</p><h2>Recomendações explicáveis</h2></div><span className="pill">Aprovação humana</span></div><div className="recommendation-list">{dashboard.recommendations.length === 0 && <div className="empty-state">Nenhum sinal forte para recomendar uma ação neste período.</div>}{dashboard.recommendations.map((item) => { const decision = decisions[item.key] ?? (item.status === "PENDING" ? undefined : item.status); return <article className={`recommendation-card priority-${item.priority.toLowerCase()}`} key={item.key}><div><span className="priority">{item.priority === "HIGH" ? "Alta prioridade" : "Prioridade média"}</span><h3>{item.title}</h3><strong>{item.entity_name}</strong><p>{item.explanation}</p><small><b>Evidência:</b> {item.evidence}</small><small><b>Impacto esperado:</b> {item.expected_impact}</small></div>{decision ? <div className={`decision ${decision.toLowerCase()}`}>{decision === "ACCEPTED" ? "Aceita para acompanhamento" : "Rejeitada"}</div> : <div className="decision-actions"><button onClick={() => void decide(item, "REJECTED")}>Rejeitar</button><button onClick={() => void decide(item, "ACCEPTED")}>Aceitar e acompanhar</button></div>}</article>; })}</div></section>
+        <section className="panel table-panel"><div className="panel-title"><div><p className="eyebrow">ACOMPANHAMENTO</p><h2>Melhorias aprovadas</h2></div><span>{improvements.length} registradas</span></div><div className="table-wrap"><table><thead><tr><th>Melhoria</th><th>Estado</th><th>Métrica</th><th>Antes</th><th>Depois</th><th>Resultado</th></tr></thead><tbody>{improvements.map((item) => <tr key={item.id}><td>{item.title}</td><td>{item.status === "PLANNED" ? "Planejada" : item.status}</td><td>{item.metric_name ?? "A definir"}</td><td>{item.before_value ?? "—"}</td><td>{item.after_value ?? "—"}</td><td>{item.result ?? "Em acompanhamento"}</td></tr>)}</tbody></table></div></section>
         <section className="panel table-panel"><div className="panel-title"><div><p className="eyebrow">CAMPANHAS</p><h2>Estrutura disponível</h2></div><span>{campaigns.length} exibidas</span></div><div className="table-wrap"><table><thead><tr><th>Campanha</th><th>Objetivo</th><th>Status</th></tr></thead><tbody>{campaigns.map((campaign) => <tr key={campaign.id}><td>{campaign.name}</td><td>{campaign.objective ?? "Não informado"}</td><td><span className={`status ${campaign.status.toLowerCase()}`}>{campaign.status === "ACTIVE" ? "Ativa" : "Arquivada"}</span></td></tr>)}</tbody></table></div></section>
       </>}
     </section>

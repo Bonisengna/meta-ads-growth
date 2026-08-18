@@ -16,7 +16,10 @@ from app.models.entities import (
     DashboardRead,
     EntityStatus,
     MetaAccountRead,
+    ImprovementRead,
     Page,
+    RecommendationDecision,
+    RecommendationDecisionRead,
 )
 from app.services.entity_services import (
     AdService,
@@ -27,6 +30,7 @@ from app.services.entity_services import (
     EntityNotFoundError,
     MetaAccountService,
     MetricService,
+    RecommendationService,
 )
 
 router = APIRouter()
@@ -250,5 +254,38 @@ def get_dashboard(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.post(
+    "/recommendations/decision",
+    response_model=RecommendationDecisionRead,
+    tags=["Recomendações"],
+    status_code=status.HTTP_201_CREATED,
+)
+def decide_recommendation(
+    payload: RecommendationDecision, client: SupabaseClient
+) -> dict[str, object]:
+    try:
+        return RecommendationService(client).decide(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        raise database_unavailable(exc) from exc
+
+
+@router.get(
+    "/improvements", response_model=Page[ImprovementRead], tags=["Recomendações"]
+)
+def list_improvements(
+    client: SupabaseClient,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> dict[str, object]:
+    try:
+        return RecommendationService(client).list_improvements(page, page_size)
     except Exception as exc:
         raise database_unavailable(exc) from exc

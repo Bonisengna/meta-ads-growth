@@ -12,6 +12,7 @@ from app.services.entity_services import (
     MetricService,
     aggregate_metrics,
     build_insights,
+    build_recommendations,
     compare_metrics,
     resolve_periods,
 )
@@ -158,3 +159,16 @@ def test_metric_service_filters_period_without_status_filter() -> None:
         ("eq", "campaign_id", str(CLIENT_ID)),
     ]
     assert all(column != "status" for _, column, _ in fake.filters)
+
+
+def test_recommendations_are_explainable_and_prioritized() -> None:
+    recommendations = build_recommendations([{
+        "entity_type": "ADSET", "entity_id": str(CLIENT_ID), "name": "Público A",
+        "spend": Decimal("35"), "impressions": 2000, "conversations": 0,
+        "ctr": Decimal("0.5"),
+    }], [])
+    assert [item["rule_code"] for item in recommendations] == [
+        "SPEND_WITHOUT_CONVERSATION", "LOW_CTR"
+    ]
+    assert recommendations[0]["priority"] == "HIGH"
+    assert "35.00" in str(recommendations[0]["evidence"])
