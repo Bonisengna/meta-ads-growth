@@ -45,8 +45,8 @@ class MetaSyncRunner:
         self.now = now
 
     def run(self, lookback_days: int = 3) -> dict[str, Any]:
-        if not 1 <= lookback_days <= 120:
-            raise ValueError("lookback_days deve estar entre 1 e 120")
+        if not 1 <= lookback_days <= 180:
+            raise ValueError("lookback_days deve estar entre 1 e 180")
 
         run = self._acquire(lookback_days)
         started_at = datetime.fromisoformat(run["started_at"])

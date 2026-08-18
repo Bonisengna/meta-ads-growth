@@ -546,16 +546,25 @@ class DashboardService:
     ) -> list[dict[str, object]]:
         if not entity_ids:
             return []
-        response = (
-            self.client.table(table)
-            .select(f"{id_column},spend,impressions,clicks,leads,conversations")
-            .gte("metric_date", date_from.isoformat())
-            .lte("metric_date", date_to.isoformat())
-            .in_(id_column, entity_ids)
-            .execute()
-        )
+        rows: list[dict[str, object]] = []
+        offset = 0
+        while True:
+            response = (
+                self.client.table(table)
+                .select(f"{id_column},spend,impressions,clicks,leads,conversations")
+                .gte("metric_date", date_from.isoformat())
+                .lte("metric_date", date_to.isoformat())
+                .in_(id_column, entity_ids)
+                .range(offset, offset + 999)
+                .execute()
+            )
+            batch = response.data or []
+            rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            offset += 1000
         grouped: dict[str, list[dict[str, object]]] = {}
-        for row in response.data or []:
+        for row in rows:
             grouped.setdefault(str(row[id_column]), []).append(row)
         entities = {str(row["id"]): row for row in entity_rows}
         ranking = []

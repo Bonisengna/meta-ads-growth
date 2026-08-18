@@ -101,7 +101,7 @@ GET /api/v1/ads?adset_id={adset_id}
 
 Sem o parâmetro `status`, tanto `ACTIVE` quanto `ARCHIVED` são retornados.
 
-O dashboard aceita janelas prontas de 7, 14, 30, 90 ou 120 dias:
+O dashboard aceita janelas prontas de 7, 14, 30, 90, 120 ou 180 dias:
 
 ```http
 GET /api/v1/dashboard?days=30
@@ -158,6 +158,17 @@ Para coletar uma faixa histórica, a partir de `backend/`:
 ```powershell
 .\.venv\Scripts\python.exe scripts\smoke_meta.py --metrics ACCOUNT_ID --from-date 2025-11-01 --to-date 2025-11-30
 ```
+
+Para preparar a visão histórica completa de uma conta já cadastrada, execute uma
+carga inicial de 180 dias. A operação usa UPSERT e pode ser repetida sem duplicar
+as métricas:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\sync_meta_all.py --lookback-days 180
+```
+
+A rotina diária continua usando `META_SYNC_LOOKBACK_DAYS=3`; não configure 180
+como padrão do worker.
 
 O comando continua aceitando `--date AAAA-MM-DD` para apenas um dia. A coleta
 usa `UPSERT`, portanto repetir o mesmo intervalo atualiza as linhas existentes

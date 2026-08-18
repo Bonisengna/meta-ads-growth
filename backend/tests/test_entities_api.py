@@ -195,7 +195,11 @@ def test_dashboard_validates_period_filters() -> None:
     override(FakeClient())
     assert client.get("/api/v1/dashboard?days=30").status_code == 200
     assert client.get("/api/v1/dashboard?days=120").status_code == 200
+    response = client.get("/api/v1/dashboard?days=180")
+    assert response.status_code == 200
+    assert response.json()["period"]["days"] == 180
     assert client.get("/api/v1/dashboard?days=8").status_code == 422
+    assert client.get("/api/v1/dashboard?days=181").status_code == 422
     assert client.get("/api/v1/dashboard?date_from=2025-11-01").status_code == 422
 
 

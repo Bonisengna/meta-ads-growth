@@ -153,6 +153,24 @@ def test_runner_syncs_only_active_accounts_and_reprocesses_today(monkeypatch) ->
     assert saved["duration_ms"] == 0
 
 
+def test_runner_accepts_180_day_historical_backfill(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    result = MetaSyncRunner(  # type: ignore[arg-type]
+        FakeSupabase(make_database()), object(), now=lambda: NOW, sleep=lambda _delay: None
+    ).run(lookback_days=180)
+
+    assert result["status"] == "SUCCESS"
+    assert result["lookback_days"] == 180
+    assert ("metrics", "123", date(2026, 2, 18), date(2026, 8, 16)) in FakeSyncService.calls
+
+
+def test_runner_rejects_more_than_180_days() -> None:
+    runner = MetaSyncRunner(FakeSupabase(make_database()), object(), now=lambda: NOW)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="entre 1 e 180"):
+        runner.run(181)
+
+
 def test_runner_marks_partial_when_one_account_fails(monkeypatch) -> None:
     FakeSyncService.calls = []
     monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)

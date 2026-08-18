@@ -32,7 +32,7 @@ FastAPI local em `http://127.0.0.1:8000`.
 - autenticação por e-mail e senha;
 - sessão Supabase persistida no navegador;
 - chamadas FastAPI com Bearer token;
-- filtros de 7, 14, 30, 90 e 120 dias;
+- filtros de 7, 14, 30, 90, 120 e 180 dias;
 - filtros por cliente, conta e campanha;
 - indicadores e comparação com período anterior;
 - visão da estrutura importada;
