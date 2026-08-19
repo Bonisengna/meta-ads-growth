@@ -1,6 +1,10 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
+from app.services.meta_graph_client import MetaGraphError
+
 from app.services.meta_sync_service import (
     MetaSyncService,
     action_map,
@@ -250,3 +254,22 @@ def test_breakdown_metrics_are_stored_separately() -> None:
     assert result["age"] == 1
     assert database["breakdown_metrics"][0]["dimension_type"] == "AGE"
     assert database["breakdown_metrics"][0]["dimension_value"] == "25-34"
+
+
+def test_breakdown_error_identifies_the_failed_dimension() -> None:
+    class FailingMeta(FakeMeta):
+        def list_breakdown_insights(
+            self, _account_id: str, breakdown: str, _since: str, _until: str
+        ):
+            if breakdown == "platform_position":
+                raise MetaGraphError("Invalid combination", code=100, status_code=400)
+            return []
+
+    database = {"campaigns": [], "breakdown_metrics": []}
+    service = MetaSyncService(FakeSupabase(database), FailingMeta())  # type: ignore[arg-type]
+
+    with pytest.raises(MetaGraphError, match="PLACEMENT/platform_position") as captured:
+        service.sync_breakdown_metrics("123", date(2026, 8, 15))
+
+    assert captured.value.code == 100
+    assert captured.value.status_code == 400

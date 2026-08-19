@@ -5,7 +5,7 @@ from uuid import UUID
 
 from supabase import Client
 
-from app.services.meta_graph_client import MetaGraphClient
+from app.services.meta_graph_client import MetaGraphClient, MetaGraphError
 
 
 class MetaEntityNotAccessibleError(LookupError):
@@ -121,9 +121,16 @@ class MetaSyncService:
         campaign_ids = self._internal_id_map("campaigns", "meta_campaign_id")
         counts: dict[str, int] = {}
         for dimension_type, meta_breakdown in BREAKDOWN_SPECS.items():
-            rows = self.meta.list_breakdown_insights(
-                account_id, meta_breakdown, since.isoformat(), until.isoformat()
-            )
+            try:
+                rows = self.meta.list_breakdown_insights(
+                    account_id, meta_breakdown, since.isoformat(), until.isoformat()
+                )
+            except MetaGraphError as exc:
+                raise MetaGraphError(
+                    f"Falha no detalhamento {dimension_type}/{meta_breakdown}: {exc}",
+                    code=exc.code,
+                    status_code=exc.status_code,
+                ) from exc
             payloads = [
                 breakdown_payload(
                     row,

@@ -99,6 +99,7 @@ class MetaSyncRunner:
         today = self.now().date()
         since = today - timedelta(days=lookback_days - 1)
         sync = MetaSyncService(self.supabase, self.meta)
+        stage = "entities"
         try:
             entities, entity_attempts = retry_transient(
                 lambda: sync.sync_account(account["client_id"], account_id),
@@ -106,12 +107,14 @@ class MetaSyncRunner:
                 self.retry_delay_seconds,
                 self.sleep,
             )
+            stage = "metrics"
             metrics, metric_attempts = retry_transient(
                 lambda: sync.sync_daily_metrics(account_id, since, today),
                 self.max_attempts,
                 self.retry_delay_seconds,
                 self.sleep,
             )
+            stage = "breakdowns"
             breakdowns, breakdown_attempts = retry_transient(
                 lambda: sync.sync_breakdown_metrics(account_id, since, today),
                 self.max_attempts,
@@ -135,6 +138,7 @@ class MetaSyncRunner:
                 "name": account.get("name"),
                 "status": "FAILED",
                 "period": {"date_from": since.isoformat(), "date_to": today.isoformat()},
+                "error_stage": stage,
                 "error": safe_error(exc),
             }
             if isinstance(exc, MetaGraphError):

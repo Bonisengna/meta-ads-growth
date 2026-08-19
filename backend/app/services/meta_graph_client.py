@@ -114,17 +114,25 @@ class MetaGraphClient:
         }
         if breakdown not in allowed:
             raise ValueError("breakdown não suportado")
+        fields = "campaign_id,date_start,spend,impressions,reach,clicks"
+        # A Meta trata `actions` e `inline_link_clicks` como métricas de ação.
+        # Elas geram action_type, incompatível com platform_position.
+        if breakdown != "platform_position":
+            fields += ",inline_link_clicks,actions"
+        breakdown_params = (
+            {"action_breakdowns": "[]"}
+            if breakdown == "platform_position"
+            else {}
+        )
         return list(
             self._paginate(
                 f"/{account_node(account_id)}/insights",
-                fields=(
-                    "campaign_id,date_start,spend,impressions,reach,clicks,"
-                    "inline_link_clicks,actions"
-                ),
+                fields=fields,
                 level="campaign",
                 breakdowns=breakdown,
                 time_increment="1",
                 time_range={"since": since, "until": until},
+                **breakdown_params,
             )
         )
 
@@ -155,19 +163,32 @@ class MetaGraphClient:
         try:
             # `None` preserva os query params já presentes na URL de paginação.
             response = self.http.get(path, params=request_params or None)
-            response.raise_for_status()
-            payload = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
+        except httpx.HTTPError as exc:
             status_code = getattr(getattr(exc, "response", None), "status_code", None)
             raise MetaGraphError("Falha ao consultar a Meta Graph API.", status_code=status_code) from exc
 
-        if "error" in payload:
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise MetaGraphError(
+                "A Meta Graph API retornou uma resposta inválida.",
+                status_code=response.status_code,
+            ) from exc
+
+        if isinstance(payload, dict) and "error" in payload:
             error = payload["error"]
             raise MetaGraphError(
-                error.get("message", "Erro retornado pela Meta Graph API."),
+                error.get("message") or "Falha ao consultar a Meta Graph API.",
                 code=error.get("code"),
                 status_code=response.status_code,
             )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise MetaGraphError(
+                "Falha ao consultar a Meta Graph API.",
+                status_code=response.status_code,
+            ) from exc
         return payload
 
 

@@ -115,6 +115,8 @@ class FakeSyncService:
 
     def sync_breakdown_metrics(self, account_id, since, until):
         self.calls.append(("breakdowns", account_id, since, until))
+        if account_id == "breakdown-failed":
+            raise MetaGraphError("invalid breakdown", code=100, status_code=400)
         return {"age": 2, "gender": 2}
 
 
@@ -185,6 +187,22 @@ def test_runner_marks_partial_when_one_account_fails(monkeypatch) -> None:
     assert result["status"] == "PARTIAL"
     assert result["accounts_success"] == 1
     assert result["accounts_failed"] == 1
+    assert result["accounts"][1]["error_stage"] == "entities"
+
+
+def test_runner_reports_breakdown_failure_stage(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    database = make_database()
+    database["meta_accounts"][0]["meta_account_id"] = "breakdown-failed"
+
+    result = MetaSyncRunner(  # type: ignore[arg-type]
+        FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None
+    ).run(3)
+
+    assert result["status"] == "FAILED"
+    assert result["accounts"][0]["error_stage"] == "breakdowns"
+    assert result["accounts"][0]["error_code"] == 100
 
 
 def test_running_lock_prevents_concurrent_sync() -> None:

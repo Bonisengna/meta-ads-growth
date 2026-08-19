@@ -58,6 +58,26 @@ def test_breakdown_insights_send_one_supported_dimension() -> None:
 
     assert captured[0].url.params["breakdowns"] == "age"
     assert captured[0].url.params["level"] == "campaign"
+    assert "actions" in captured[0].url.params["fields"]
+
+
+def test_placement_breakdown_omits_incompatible_actions_field() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    with MetaGraphClient("token", transport=httpx.MockTransport(handler)) as client:
+        client.list_breakdown_insights(
+            "123", "platform_position", "2026-08-01", "2026-08-15"
+        )
+
+    fields = captured[0].url.params["fields"].split(",")
+    assert "actions" not in fields
+    assert "inline_link_clicks" not in fields
+    assert "clicks" in fields
+    assert captured[0].url.params["action_breakdowns"] == "[]"
 
 
 def test_http_failure_becomes_safe_meta_error() -> None:
@@ -66,6 +86,22 @@ def test_http_failure_becomes_safe_meta_error() -> None:
     with MetaGraphClient("invalid", transport=transport) as client:
         with pytest.raises(MetaGraphError, match="Falha ao consultar"):
             client.list_ad_accounts()
+
+
+def test_http_failure_preserves_meta_error_details() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            400,
+            json={"error": {"message": "Invalid parameter", "code": 100}},
+        )
+    )
+
+    with MetaGraphClient("token", transport=transport) as client:
+        with pytest.raises(MetaGraphError, match="Invalid parameter") as captured:
+            client.list_ad_accounts()
+
+    assert captured.value.code == 100
+    assert captured.value.status_code == 400
 
 
 def test_account_node_adds_prefix_once() -> None:
