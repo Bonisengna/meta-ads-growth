@@ -67,3 +67,24 @@ deve ser tratado como serviço de e-mail de produção.
 Opcionalmente, habilite o aviso de segurança de senha alterada nos modelos de
 notificação do Auth. O DescompliADS nunca recebe nem armazena a senha em suas
 tabelas: a atualização é feita diretamente pelo Supabase Auth.
+
+## Login com Google
+
+O botão **Continuar com Google** também usa o Supabase Auth. Para habilitá-lo:
+
+1. No Google Auth Platform, crie um cliente OAuth do tipo **Web application**.
+2. Cadastre `https://descompliads.caza85imoveis.com.br` como origem JavaScript.
+3. Cadastre como URI de redirecionamento o callback exibido em
+   `Supabase → Authentication → Providers → Google`.
+4. Preencha o Client ID e o Client Secret nessa mesma tela do Supabase e
+   habilite o provedor.
+5. Inclua `https://descompliads.caza85imoveis.com.br/dashboard` e
+   `http://localhost:3000/dashboard` na lista de URLs permitidas do Supabase.
+
+Use apenas os escopos `openid`, `userinfo.email` e `userinfo.profile`. O Client
+Secret do Google deve permanecer no Supabase e nunca pode ser incluído em
+variáveis `NEXT_PUBLIC_*` ou no repositório.
+
+Usuários novos ainda precisam ser vinculados a um cliente e a uma função antes
+de acessar dados. O Google confirma a identidade; as permissões continuam sendo
+determinadas pelo backend do DescompliADS.
