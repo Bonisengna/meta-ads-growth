@@ -37,3 +37,33 @@ FastAPI local em `http://127.0.0.1:8000`.
 - indicadores e comparação com período anterior;
 - visão da estrutura importada;
 - nenhuma escrita ou alteração na Meta.
+
+## Recuperação e alteração de senha
+
+O frontend usa o Supabase Auth para dois fluxos:
+
+- **Esqueci minha senha:** envia um link seguro por e-mail e abre a tela para
+  criar uma nova senha;
+- **Alterar senha:** disponível para o usuário autenticado em
+  `Ajustes → Geral`.
+
+Antes de publicar, abra o painel do Supabase em
+`Authentication → URL Configuration` e configure:
+
+```text
+Site URL
+https://descompliads.caza85imoveis.com.br
+
+Redirect URLs
+https://descompliads.caza85imoveis.com.br/?password-recovery=1
+http://localhost:3000/?password-recovery=1
+```
+
+Em `Authentication → Providers`, mantenha o provedor **Email** habilitado.
+Para produção, configure também um servidor SMTP próprio em
+`Authentication → SMTP Settings`; o envio padrão do Supabase é limitado e não
+deve ser tratado como serviço de e-mail de produção.
+
+Opcionalmente, habilite o aviso de segurança de senha alterada nos modelos de
+notificação do Auth. O DescompliADS nunca recebe nem armazena a senha em suas
+tabelas: a atualização é feita diretamente pelo Supabase Auth.

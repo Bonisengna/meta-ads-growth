@@ -13,6 +13,7 @@ const integer = new Intl.NumberFormat("pt-BR");
 const decimal = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 type Filters = { days: number; clientId: string; accountId: string; campaignId: string };
 type MainView = "dashboard" | "campaigns" | "analyses" | "settings";
+type AuthScreen = "sign-in" | "forgot-password" | "update-password";
 type TrendMeaning = "positive" | "negative" | "neutral" | "contextual";
 type ExecutivePriority = {
   key: string;
@@ -52,6 +53,17 @@ function filtersFromLocation(): Filters {
     accountId: params.get("account") ?? "",
     campaignId: params.get("campaign") ?? "",
   };
+}
+
+function isPasswordRecoveryLocation() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("password-recovery") === "1";
+}
+
+function passwordValidation(password: string, confirmation: string) {
+  if (password.length < 8) return "A nova senha precisa ter pelo menos 8 caracteres.";
+  if (password !== confirmation) return "As senhas informadas não são iguais.";
+  return "";
 }
 
 function filtersQuery(filters: Filters) {
@@ -195,7 +207,7 @@ function BreakdownChart({ title, subtitle, points }: { title: string; subtitle: 
   const ranked = [...points].sort((a, b) => valueFor(b) - valueFor(a)).slice(0, 8);
   const maximum = Math.max(...ranked.map(valueFor), 1);
   const guide = chartGuides[title];
-  return <><article className="panel breakdown-chart explainable-chart" onClick={() => guide && setShowGuide(true)}><div className="panel-title"><div><p className="eyebrow">{subtitle}</p><h2>{title} <button className="info-button" aria-label={`Entenda o gráfico ${title}`} onClick={(event) => { event.stopPropagation(); setShowGuide(true); }}>i</button></h2></div><span>{points.length} segmentos</span></div>{ranked.length === 0 ? <div className="chart-empty">Aguardando a próxima sincronização analítica.</div> : <div className="horizontal-chart">{ranked.map((item) => { const conversions = item.leads + item.conversations; const value = valueFor(item); return <div className="chart-row" key={item.value}><div className="chart-label"><strong>{dimensionLabels[item.value] ?? item.value}</strong><small>{isPlacement ? `${currency.format(item.spend)} investidos · ${item.clicks} cliques` : `${conversions} resultados · CPA ${item.cpa == null ? "—" : currency.format(item.cpa)}`}</small></div><div className="chart-track"><i style={{ width: `${Math.max((value / maximum) * 100, value ? 5 : 0)}%` }} /></div><span>{isPlacement ? (item.ctr == null ? "—" : `CTR ${decimal.format(item.ctr)}%`) : (item.conversion_rate == null ? "—" : `${decimal.format(item.conversion_rate)}%`)}</span></div>; })}</div>}</article>{showGuide && guide && <IndicatorInfo guide={guide} onClose={() => setShowGuide(false)} />}</>;
+  return <><article className="panel breakdown-chart explainable-chart" onClick={() => guide && setShowGuide(true)}><div className="panel-title"><div><p className="eyebrow">{subtitle}</p><h2>{title} <button className="info-button" aria-label={`Entenda o gráfico ${title}`} onClick={(event) => { event.stopPropagation(); setShowGuide(true); }}>i</button></h2></div><span>{points.length} segmentos</span></div>{ranked.length === 0 ? <div className="chart-empty">Aguardando a próxima sincronização analítica.</div> : <div className="horizontal-chart">{ranked.map((item) => { const conversions = item.leads + item.conversations; const value = valueFor(item); return <div className="chart-row" key={item.value}><div className="chart-label"><strong>{dimensionLabels[item.value] ?? item.value}</strong><small>{isPlacement ? `${currency.format(item.spend)} investidos · ${item.link_clicks} cliques` : `${conversions} resultados · CPA ${item.cpa == null ? "—" : currency.format(item.cpa)}`}</small></div><div className="chart-track"><i style={{ width: `${Math.max((value / maximum) * 100, value ? 5 : 0)}%` }} /></div><span>{isPlacement ? (item.ctr == null ? "—" : `CTR ${decimal.format(item.ctr)}%`) : (item.conversion_rate == null ? "—" : `${decimal.format(item.conversion_rate)}%`)}</span></div>; })}</div>}</article>{showGuide && guide && <IndicatorInfo guide={guide} onClose={() => setShowGuide(false)} />}</>;
 }
 
 function TimeHeatmap({ points }: { points: BreakdownPoint[] }) {
@@ -212,11 +224,13 @@ function FieldHelp({ text }: { text: string }) {
   return <span className="field-help" tabIndex={0} aria-label={text}>?<span role="tooltip">{text}</span></span>;
 }
 
-function SettingsPanel({ token, clients, userEmail }: { token: string; clients: Client[]; userEmail: string }) {
+function SettingsPanel({ token, clients, userEmail, onUpdatePassword }: { token: string; clients: Client[]; userEmail: string; onUpdatePassword: (password: string) => Promise<void> }) {
   const [data, setData] = useState<SettingsData | null>(null);
   const [section, setSection] = useState<SettingsSection>("meta");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
   const [meta, setMeta] = useState({ client_id: clients[0]?.id ?? "", connection_name: "Meta Ads", ad_account_id: "", business_id: "", access_token: "" });
   const [system, setSystem] = useState({ meta_app_id: "", meta_app_secret: "", system_user_id: "", graph_version: "v25.0", openai_api_key: "" });
 
@@ -246,6 +260,22 @@ function SettingsPanel({ token, clients, userEmail }: { token: string; clients: 
       setSystem((value) => ({ ...value, meta_app_secret: "", openai_api_key: "" })); setMessage("Configuração atualizada e protegida com segurança."); await refresh();
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar."); }
     finally { setBusy(false); }
+  }
+
+  async function changeAccountPassword(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    const validationMessage = passwordValidation(accountPassword, accountPasswordConfirmation);
+    if (validationMessage) { setMessage(validationMessage); return; }
+    setBusy(true);
+    try {
+      await onUpdatePassword(accountPassword);
+      setAccountPassword("");
+      setAccountPasswordConfirmation("");
+      setMessage("Senha alterada com sucesso. Use a nova senha no próximo acesso.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Não foi possível alterar a senha.");
+    } finally { setBusy(false); }
   }
 
   const configured = (provider: string, clientId?: string) => data?.credentials.find((item) => item.provider === provider && (!clientId || item.client_id === clientId));
@@ -281,7 +311,7 @@ function SettingsPanel({ token, clients, userEmail }: { token: string; clients: 
       {section === "ai" && <form className="settings-card" onSubmit={saveSystem}><div className="settings-card-head"><div className="settings-icon ai">IA</div><div><h2>Inteligência Artificial</h2><p>Conecte o serviço que apoiará as análises.</p></div><span className={configured("OPENAI") ? "connection-ok" : "connection-pending"}>{configured("OPENAI") ? "Configurado" : "Pendente"}</span></div>
         {!data?.system_admin ? <div className="restricted-box">Somente o administrador pode alterar esta chave.</div> : <><label><span>Serviço de inteligência artificial <FieldHelp text="Nesta etapa o sistema está preparado para usar a OpenAI." /></span><select disabled><option>OpenAI</option></select></label><label><span>Chave de acesso da OpenAI <FieldHelp text="Crie a chave na área API Keys da plataforma OpenAI. Ela costuma começar com sk-proj-." /></span><input type="password" value={system.openai_api_key} onChange={(e) => setSystem({ ...system, openai_api_key: e.target.value })} placeholder={configured("OPENAI") ? "•••••••• configurada — digite para substituir" : "sk-proj-…"} autoComplete="new-password" /></label><div className="secret-note">Nenhuma análise ou cobrança será iniciada apenas por salvar a chave. Os prompts são internos e não aparecem neste painel.</div><button disabled={busy || !system.openai_api_key}>{busy ? "Salvando…" : "Salvar chave com segurança"}</button></>}
       </form>}
-      {section === "general" && <div className="settings-card"><div className="settings-card-head"><div className="settings-icon">{userEmail.slice(0, 1).toUpperCase()}</div><div><h2>Sua conta</h2><p>Informações do acesso atual ao DescompliADS.</p></div><span className="connection-ok">Protegido</span></div><dl className="connection-summary account-summary"><div><dt>Usuário</dt><dd>{userEmail.split("@")[0]}</dd></div><div><dt>E-mail</dt><dd>{userEmail}</dd></div><div><dt>Situação</dt><dd><i /> Acesso ativo</dd></div></dl></div>}
+      {section === "general" && <div className="settings-account-stack"><div className="settings-card"><div className="settings-card-head"><div className="settings-icon">{userEmail.slice(0, 1).toUpperCase()}</div><div><h2>Sua conta</h2><p>Informações do acesso atual ao DescompliADS.</p></div><span className="connection-ok">Protegido</span></div><dl className="connection-summary account-summary"><div><dt>Usuário</dt><dd>{userEmail.split("@")[0]}</dd></div><div><dt>E-mail</dt><dd>{userEmail}</dd></div><div><dt>Situação</dt><dd><i /> Acesso ativo</dd></div></dl></div><form className="settings-card password-card" onSubmit={changeAccountPassword}><div><p className="eyebrow coral">SEGURANÇA DA CONTA</p><h2>Alterar senha</h2><p>Crie uma nova senha para os próximos acessos.</p></div><label><span>Nova senha <FieldHelp text="Use pelo menos 8 caracteres e evite senhas usadas em outros serviços." /></span><input type="password" value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label><label><span>Confirme a nova senha</span><input type="password" value={accountPasswordConfirmation} onChange={(event) => setAccountPasswordConfirmation(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Digite a senha novamente" /></label><div className="secret-note">A senha é atualizada pelo Supabase e não fica armazenada no DescompliADS.</div><button disabled={busy}>{busy ? "Alterando…" : "Alterar minha senha"}</button></form></div>}
       {section === "users" && placeholder("Usuários", "Convites, funções e permissões de acesso.")}
       {section === "clients" && placeholder("Clientes", "Cadastro e organização dos clientes atendidos.")}
       {section === "crm" && placeholder("CRM", "Conexões com ferramentas comerciais e atendimento.")}
@@ -301,6 +331,11 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authScreen, setAuthScreen] = useState<AuthScreen>(() => isPasswordRecoveryLocation() ? "update-password" : "sign-in");
+  const [authMessage, setAuthMessage] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
   const [authError, setAuthError] = useState("");
   const [filters, setFilters] = useState<Filters>(filtersFromLocation);
   const [clients, setClients] = useState<Client[]>([]);
@@ -314,12 +349,20 @@ export default function Home() {
   const initialLoadStarted = useRef(false);
 
   useEffect(() => {
-    if (pathname === "/") router.replace(`${viewRoutes.dashboard}${filtersQuery(filters)}`, { scroll: false });
+    if (pathname === "/" && !isPasswordRecoveryLocation()) router.replace(`${viewRoutes.dashboard}${filtersQuery(filters)}`, { scroll: false });
   }, [filters, pathname, router]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      setSession(next);
+      if (event === "PASSWORD_RECOVERY") {
+        setAuthScreen("update-password");
+        setAuthError("");
+        setAuthMessage("Link confirmado. Agora escolha sua nova senha.");
+        setAuthReady(true);
+      }
+    });
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
@@ -354,9 +397,42 @@ export default function Home() {
   }, [loadData, session]);
 
   async function signIn(event: FormEvent) {
-    event.preventDefault(); setAuthError("");
+    event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthBusy(true);
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) setAuthError("E-mail ou senha inválidos.");
+    setAuthBusy(false);
+  }
+
+  async function requestPasswordReset(event: FormEvent) {
+    event.preventDefault(); setAuthError(""); setAuthMessage(""); setAuthBusy(true);
+    const redirectTo = `${window.location.origin}/?password-recovery=1`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (resetError) setAuthError("Não foi possível enviar o link agora. Aguarde um pouco e tente novamente.");
+    else setAuthMessage("Se este e-mail estiver cadastrado, você receberá um link para criar uma nova senha.");
+    setAuthBusy(false);
+  }
+
+  async function finishPasswordRecovery(event: FormEvent) {
+    event.preventDefault(); setAuthError(""); setAuthMessage("");
+    const validationMessage = passwordValidation(newPassword, newPasswordConfirmation);
+    if (validationMessage) { setAuthError(validationMessage); return; }
+    setAuthBusy(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    if (updateError) {
+      setAuthError("O link expirou ou não é mais válido. Solicite um novo link de recuperação.");
+      setAuthBusy(false);
+      return;
+    }
+    await supabase.auth.signOut();
+    setNewPassword(""); setNewPasswordConfirmation(""); setAuthScreen("sign-in");
+    setAuthMessage("Senha atualizada com sucesso. Entre novamente com a nova senha.");
+    router.replace("/", { scroll: false });
+    setAuthBusy(false);
+  }
+
+  async function updateAuthenticatedPassword(nextPassword: string) {
+    const { error: updateError } = await supabase.auth.updateUser({ password: nextPassword });
+    if (updateError) throw new Error("Não foi possível alterar a senha. Tente novamente em alguns instantes.");
   }
 
   async function decide(item: Recommendation, status: "ACCEPTED" | "REJECTED") {
@@ -390,11 +466,12 @@ export default function Home() {
 
   if (!isSupabaseConfigured) return <main className="center-screen"><div className="brand-mark">D</div><h2>Frontend ainda não configurado</h2><p>Crie o arquivo <code>.env.local</code> conforme o README.</p></main>;
   if (!authReady) return <main className="center-screen"><div className="spinner" /><p>Preparando seu painel…</p></main>;
-  if (!session) return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Decisões melhores começam com números claros.</h1><p>Campanhas, comparações e sinais de desempenho em um só lugar — sem alterar nada na Meta.</p><div className="trust-line"><i /> Dados protegidos por usuário e cliente</div></section><section className="login-panel"><form onSubmit={signIn}><div><p className="eyebrow coral">ACESSO SEGURO</p><h2>Bem-vinda de volta</h2><p>Use o usuário criado no Supabase.</p></div><label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label><label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" /></label>{authError && <p className="form-error">{authError}</p>}<button type="submit">Entrar no painel <span>→</span></button><small>O token permanece na sessão do navegador e nunca é exibido.</small></form></section></main>;
+  if (authScreen === "update-password") return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Proteja seu acesso com uma nova senha.</h1><p>O link de recuperação abre uma sessão temporária e segura somente para atualizar sua credencial.</p><div className="trust-line"><i /> Sua senha não é armazenada pelo DescompliADS</div></section><section className="login-panel"><form onSubmit={finishPasswordRecovery}><div><p className="eyebrow coral">RECUPERAÇÃO DE ACESSO</p><h2>Crie uma nova senha</h2><p>Use pelo menos 8 caracteres.</p></div><label>Nova senha<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label><label>Confirme a nova senha<input type="password" value={newPasswordConfirmation} onChange={(event) => setNewPasswordConfirmation(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Digite novamente" /></label>{authMessage && <p className="form-success">{authMessage}</p>}{authError && <p className="form-error">{authError}</p>}<button type="submit" disabled={authBusy}>{authBusy ? "Atualizando…" : "Salvar nova senha"}</button><button type="button" className="auth-link" onClick={() => { setAuthScreen("forgot-password"); setAuthError(""); setAuthMessage(""); }}>Solicitar outro link</button></form></section></main>;
+  if (!session) return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Decisões melhores começam com números claros.</h1><p>Campanhas, comparações e sinais de desempenho em um só lugar — sem alterar nada na Meta.</p><div className="trust-line"><i /> Dados protegidos por usuário e cliente</div></section><section className="login-panel">{authScreen === "forgot-password" ? <form onSubmit={requestPasswordReset}><div><p className="eyebrow coral">RECUPERAR ACESSO</p><h2>Esqueceu sua senha?</h2><p>Informe seu e-mail e enviaremos um link seguro para criar uma nova senha.</p></div><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label>{authMessage && <p className="form-success">{authMessage}</p>}{authError && <p className="form-error">{authError}</p>}<button type="submit" disabled={authBusy}>{authBusy ? "Enviando…" : "Enviar link de recuperação"}</button><button type="button" className="auth-link" onClick={() => { setAuthScreen("sign-in"); setAuthError(""); setAuthMessage(""); }}>← Voltar para entrar</button></form> : <form onSubmit={signIn}><div><p className="eyebrow coral">ACESSO SEGURO</p><h2>Bem-vinda de volta</h2><p>Use seu e-mail e senha cadastrados.</p></div><label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label><label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" /></label><button type="button" className="auth-link forgot-link" onClick={() => { setAuthScreen("forgot-password"); setAuthError(""); setAuthMessage(""); }}>Esqueci minha senha</button>{authMessage && <p className="form-success">{authMessage}</p>}{authError && <p className="form-error">{authError}</p>}<button type="submit" disabled={authBusy}>{authBusy ? "Entrando…" : <>Entrar no painel <span>→</span></>}</button><small>O token permanece na sessão do navegador e nunca é exibido.</small></form>}</section></main>;
 
   return <main className="app-shell">
     <aside><div className="logo"><div className="brand-mark small">D</div><div><strong>DescompliADS</strong><small>Growth Intelligence</small></div></div><nav aria-label="Navegação principal"><button className={view === "dashboard" ? "active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}>◫ <span>Visão geral</span></button><button className={view === "campaigns" ? "active" : ""} aria-current={view === "campaigns" ? "page" : undefined} onClick={() => navigate("campaigns")}>◎ <span>Campanhas</span></button><button className={view === "analyses" ? "active" : ""} aria-current={view === "analyses" ? "page" : undefined} onClick={() => navigate("analyses")}>◇ <span>Análises</span></button><button className={view === "settings" ? "active" : ""} aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>⚙ <span>Ajustes</span></button></nav><div className="sidebar-foot"><span className="status-dot" /> Sistema conectado<button onClick={() => supabase.auth.signOut()}>Sair</button></div></aside>
-    {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} /></section> : <section className="workspace" id="dashboard-top"><header><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{pageCopy.title}</h1><p>{pageCopy.subtitle}</p></div></header>
+    {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} onUpdatePassword={updateAuthenticatedPassword} /></section> : <section className="workspace" id="dashboard-top"><header><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{pageCopy.title}</h1><p>{pageCopy.subtitle}</p></div></header>
       <section className="filters"><div className="filter-heading"><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div><label>Período<select value={filters.days} onChange={(e) => updateFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => updateFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => updateFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => updateFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => void loadData()}>Tentar novamente</button></div>}
       {loading && !dashboard && <section className="dashboard-loading" aria-label="Carregando painel"><div /><div /><div /><div /></section>}
