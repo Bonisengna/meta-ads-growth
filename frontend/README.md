@@ -88,3 +88,24 @@ variáveis `NEXT_PUBLIC_*` ou no repositório.
 Usuários novos ainda precisam ser vinculados a um cliente e a uma função antes
 de acessar dados. O Google confirma a identidade; as permissões continuam sendo
 determinadas pelo backend do DescompliADS.
+
+## Tipografia e legibilidade
+
+O sistema tipográfico prioriza **DIN Neuzeit Grotesk** nos títulos e **Avenir**
+nos textos. Como essas famílias são comerciais, o código usa pilhas seguras de
+substituição até que as webfonts licenciadas sejam fornecidas:
+
+- títulos: DIN Neuzeit Grotesk, DIN Neuzeit, DIN 2014, Manrope e Segoe UI;
+- textos: Avenir Next, Avenir, Inter, Segoe UI e Arial.
+
+Não adicione arquivos `.woff` ou `.woff2` obtidos sem licença. Para ativar as
+fontes exatas em todos os dispositivos, use uma licença web válida para o
+domínio `descompliads.caza85imoveis.com.br` e uma destas opções:
+
+1. kit web oficial do fornecedor, referenciado no layout do Next.js; ou
+2. arquivos webfont licenciados, hospedados em `public/fonts` e registrados com
+   `@font-face`.
+
+Por acessibilidade, o peso Light não é usado em tabelas, filtros, formulários ou
+textos pequenos. Nesses componentes, o peso regular preserva contraste e
+legibilidade; o Light deve ficar restrito a textos de apoio maiores.

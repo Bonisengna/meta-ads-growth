@@ -72,3 +72,35 @@ th,td{border-color:#303441}th{color:#858da0;background:#1b1e28}tbody tr:hover{ba
 
 /* Explicações educativas dos indicadores, independentes de IA. */
 .metric-card{position:relative}.metric-card.explainable,.explainable-chart{cursor:pointer;transition:border-color .2s,transform .2s,box-shadow .2s}.metric-card.explainable:hover,.explainable-chart:hover{border-color:#6379d5;transform:translateY(-2px);box-shadow:0 12px 34px #080b1455}.metric-card>em{display:block;margin-top:9px;color:#8293dd;font-size:8px;font-style:normal;font-weight:700}.info-button{display:inline-grid;width:20px;height:20px;padding:0;place-items:center;border:1px solid #4d5878;border-radius:50%;color:#aebcff;background:#292e40;font:800 11px var(--font-body);cursor:pointer;vertical-align:middle}.metric-card>.info-button{position:absolute;top:14px;right:14px}.panel-title h2 .info-button{margin-left:5px}.info-button:hover,.info-button:focus-visible{border-color:#8296ff;color:#fff;background:#596fe1;outline:none}.indicator-modal{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:20px;background:#080a10c9;backdrop-filter:blur(6px)}.indicator-modal>section{position:relative;width:min(520px,100%);padding:28px;border:1px solid #3b4257;border-radius:20px;background:#1d202b;box-shadow:0 30px 90px #0009}.indicator-modal h2{margin:5px 38px 20px 0;font:700 27px var(--font-display)}.modal-close{position:absolute;top:18px;right:18px;width:32px;height:32px;padding:0;border:1px solid #41485c;border-radius:50%;color:#c5ccde;background:#292d3a;font-size:20px;cursor:pointer}.guide-block{margin-top:11px;padding:14px 16px;border-left:3px solid #687cf0;border-radius:8px;background:#252a38}.guide-block.good{border-color:#32b784}.guide-block.attention{border-color:#f2a34b}.guide-block strong{font-size:11px}.guide-block p{margin:6px 0 0;color:#aab2c5;font-size:12px;line-height:1.55}.indicator-modal section>small{display:block;margin-top:18px;color:#747d91;font-size:9px;line-height:1.5}
+
+/* Sistema tipografico legivel. As familias comerciais sao ativadas quando
+   webfonts licenciadas estiverem disponiveis; os fallbacks mantem a interface
+   consistente em qualquer sistema operacional. */
+:root{--font-body:"Avenir Next","Avenir",Inter,"Segoe UI",Arial,sans-serif;--font-display:"DIN Neuzeit Grotesk","DIN Neuzeit","DIN 2014",Manrope,"Segoe UI",Arial,sans-serif;--text-xs:11px;--text-sm:12px;--text-md:14px;--text-base:15px}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body{font-size:var(--text-base);font-weight:400;line-height:1.55}
+h1,h2,h3,.logo strong,.brand-mark,.metric-card strong,.structure-flow strong,.funnel-metric b{font-family:var(--font-display);font-kerning:normal}
+p,small,span,label,input,select,button,th,td,dt,dd{font-family:var(--font-body)}
+button,input,select{font-size:var(--text-md);line-height:1.35}
+.workspace header h1,.settings-page>header h1{letter-spacing:-.025em;line-height:1.12}
+.workspace header p:last-child,.settings-page>header p:last-child{font-size:var(--text-base);line-height:1.55}
+.eyebrow{font-size:var(--text-xs);line-height:1.4}
+.logo strong{font-size:16px}.logo small{font-size:var(--text-xs);line-height:1.4}
+nav a,nav button{font-size:13px;line-height:1.4}nav em,nav button em{font-size:10px}.sidebar-foot,.sidebar-foot button{font-size:var(--text-xs)}
+.filters label{font-size:var(--text-xs);line-height:1.4}.filters select,.filters>button,.filter-actions button{font-size:13px}.period-line{font-size:var(--text-sm)}
+.metric-card>span{font-size:var(--text-sm);line-height:1.4}.metric-card small{font-size:var(--text-xs);line-height:1.45}.metric-card>em{font-size:10px;line-height:1.45}.metric-card strong{line-height:1.15}
+.panel h2{line-height:1.25}.pill,.table-panel .panel-title>span{font-size:10px}.structure-flow span{font-size:var(--text-xs)}
+.signal strong{font-size:13px}.signal p{font-size:var(--text-sm);line-height:1.55}.signal-panel>small{font-size:var(--text-xs);line-height:1.5}
+th,td{font-size:var(--text-sm);line-height:1.45}th{font-size:var(--text-xs)}.status{font-size:10px}.bar-column small{font-size:9px}
+.insight strong{font-size:13px}.insight p{font-size:var(--text-sm);line-height:1.55}.insights-panel>small{font-size:var(--text-xs);line-height:1.5}
+.settings-nav strong{font-size:10px}.settings-card-head p{font-size:var(--text-sm);line-height:1.5}.settings-card label{font-size:var(--text-sm);line-height:1.45}.settings-card label small,.secret-note,.restricted-box{font-size:var(--text-xs);line-height:1.55}.settings-card button{font-size:var(--text-sm)}
+.connection-ok,.connection-pending{font-size:10px}.field-help,.field-help>span{font-size:var(--text-xs)}.connection-summary dt{font-size:10px}.connection-summary dd{font-size:var(--text-sm)}.settings-message{font-size:var(--text-sm);line-height:1.5}
+.recommendation-card strong{font-size:var(--text-sm)}.recommendation-card p{font-size:var(--text-sm);line-height:1.55}.recommendation-card small{font-size:var(--text-xs)}.priority,.decision-actions button,.decision{font-size:10px}.empty-state{font-size:var(--text-sm)}
+.guidance-banner strong{font-size:13px}.guidance-banner span{font-size:var(--text-sm)}.dashboard-empty span{font-size:var(--text-sm)}
+.funnel-metric strong{font-size:var(--text-sm)}.funnel-metric>div span{font-size:10px;line-height:1.35}.funnel-metric p{font-size:var(--text-xs);line-height:1.55}
+.analytics-heading p:last-child{font-size:var(--text-sm)}.breakdown-chart .panel-title>span,.heatmap-panel .panel-title>span{font-size:10px}.chart-label strong{font-size:var(--text-xs)}.chart-label small{font-size:10px}.chart-row>span{font-size:10px}.chart-empty{font-size:var(--text-sm)}.heatmap-hours span{font-size:9px}.heatmap-row>strong{font-size:10px}
+.executive-summary-head>div>p:last-child{font-size:var(--text-sm)}.executive-summary-head>button{font-size:var(--text-xs)}.priority-card-top>small{font-size:10px}.priority-card h3{font-size:15px;line-height:1.35}.priority-card>p{font-size:var(--text-xs)}.priority-evidence{font-size:var(--text-xs)}.executive-clear>p{font-size:var(--text-sm)}
+.login-panel form>div>p:last-child{font-size:var(--text-base);line-height:1.55}.login-panel label{font-size:13px}.login-panel form>small,.login-panel form>.auth-link,.form-success,.password-card>div:first-child>p:last-child{font-size:var(--text-sm)}.auth-divider{font-size:10px}
+.guide-block strong{font-size:var(--text-sm)}.guide-block p{font-size:13px}.indicator-modal section>small{font-size:var(--text-xs)}
+
+@media(max-width:760px){body{font-size:15px}.workspace header p:last-child,.settings-page>header p:last-child{font-size:14px}.filters select{min-height:44px}.metric-card{padding:16px}.metric-card>span{padding-right:24px}}
