@@ -232,3 +232,22 @@ uma chamada anônima recebe `401` enquanto o usuário vinculado recebe `200`.
 - Fase 6: `../docs/fases/fase-6-automacao-sincronizacao.md`
 - Fase 7: `../docs/fases/fase-7-observabilidade.md`
 - Fase 8: `../docs/fases/fase-8-seguranca-api.md`
+
+## Cadastro completo de clientes
+
+Depois de aplicar `supabase/migrations/0017_client_business_profiles.sql`, a
+área `Ajustes → Clientes` passa a usar:
+
+```http
+GET   /api/v1/settings/clients
+POST  /api/v1/settings/clients
+PATCH /api/v1/settings/clients/{client_id}
+```
+
+O cadastro reúne dados empresariais, segmento, nicho, modelo de negócio,
+público, responsável, localização, objetivo, orçamento de mídia e etapa de
+implantação. Somente o administrador do sistema cria clientes. Administradores
+do sistema e usuários `OWNER` ou `ADMIN` podem editar os clientes autorizados.
+
+Clientes históricos não são excluídos. Use `status = ARCHIVED`; campanhas,
+contas e métricas permanecem vinculadas e disponíveis para análise histórica.

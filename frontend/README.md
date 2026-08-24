@@ -109,3 +109,17 @@ domínio `descompliads.caza85imoveis.com.br` e uma destas opções:
 Por acessibilidade, o peso Light não é usado em tabelas, filtros, formulários ou
 textos pequenos. Nesses componentes, o peso regular preserva contraste e
 legibilidade; o Light deve ficar restrito a textos de apoio maiores.
+
+## Área de clientes
+
+Em `Ajustes → Clientes`, o usuário pode consultar a carteira e completar os
+dados de cada empresa. O formulário é separado em Empresa, Mercado e
+estratégia, Contato e localização e Operação.
+
+- somente o administrador do sistema pode criar um cliente;
+- `OWNER` e `ADMIN` podem editar os clientes aos quais possuem acesso;
+- `VIEWER` e `ANALYST` consultam sem alterar;
+- arquivar substitui a exclusão e preserva todo o histórico de mídia.
+
+A tela depende da migration `0017_client_business_profiles.sql` e dos endpoints
+`/api/v1/settings/clients` do backend.

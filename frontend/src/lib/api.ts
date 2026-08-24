@@ -29,6 +29,21 @@ export async function apiPost<T>(path: string, token: string, body: unknown): Pr
   return response.json() as Promise<T>;
 }
 
+export async function apiPatch<T>(path: string, token: string, body: unknown): Promise<T> {
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: "PATCH",
+    headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 401) throw new Error("SESSION_EXPIRED");
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { detail?: unknown } | null;
+    const detail = typeof payload?.detail === "string" ? payload.detail : "Não foi possível atualizar o cliente.";
+    throw new Error(detail);
+  }
+  return response.json() as Promise<T>;
+}
+
 export function query(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => { if (value !== undefined && value !== "") search.set(key, String(value)); });

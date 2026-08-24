@@ -3,9 +3,9 @@
 import type { Session } from "@supabase/supabase-js";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiGet, apiPost, query } from "@/lib/api";
+import { apiGet, apiPatch, apiPost, query } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
-import type { BreakdownPoint, Campaign, Client, Dashboard, EntityPerformance, Improvement, MetaAccount, Metrics, Page, Recommendation, SettingsData } from "@/lib/types";
+import type { BreakdownPoint, Campaign, Client, Dashboard, EntityPerformance, Improvement, ManagedClient, MetaAccount, Metrics, Page, Recommendation, SettingsData } from "@/lib/types";
 
 const periods = [7, 14, 30, 90, 120, 180] as const;
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -220,11 +220,61 @@ function TimeHeatmap({ points }: { points: BreakdownPoint[] }) {
 
 type SettingsSection = "general" | "users" | "clients" | "meta" | "ai" | "crm" | "webhooks" | "meta-app" | "api" | "security";
 
+type ClientForm = {
+  id: string; name: string; legal_name: string; tax_id_type: "CNPJ" | "CPF" | "OTHER";
+  tax_id: string; segment: string; niche: string;
+  business_model: "B2B" | "B2C" | "B2B2C" | "LOCAL_SERVICES" | "OTHER";
+  primary_audience: string; website: string; contact_name: string; contact_email: string;
+  contact_phone: string; city: string; state: string; country_code: string; timezone: string;
+  currency: string; primary_goal: string; monthly_media_budget: string;
+  onboarding_status: "NEW" | "SETUP" | "ACTIVE" | "PAUSED"; status: "ACTIVE" | "ARCHIVED";
+  notes: string; can_manage: boolean;
+};
+
+const emptyClientForm: ClientForm = {
+  id: "", name: "", legal_name: "", tax_id_type: "CNPJ", tax_id: "", segment: "",
+  niche: "", business_model: "B2C", primary_audience: "", website: "", contact_name: "",
+  contact_email: "", contact_phone: "", city: "", state: "", country_code: "BR",
+  timezone: "America/Sao_Paulo", currency: "BRL", primary_goal: "", monthly_media_budget: "",
+  onboarding_status: "NEW", status: "ACTIVE", notes: "", can_manage: true,
+};
+
+function formFromClient(client: ManagedClient): ClientForm {
+  return {
+    id: client.id, name: client.name, legal_name: client.legal_name ?? "",
+    tax_id_type: client.tax_id_type, tax_id: client.tax_id ?? "", segment: client.segment,
+    niche: client.niche, business_model: client.business_model,
+    primary_audience: client.primary_audience ?? "", website: client.website ?? "",
+    contact_name: client.contact_name ?? "", contact_email: client.contact_email ?? "",
+    contact_phone: client.contact_phone ?? "", city: client.city ?? "", state: client.state ?? "",
+    country_code: client.country_code, timezone: client.timezone, currency: client.currency,
+    primary_goal: client.primary_goal ?? "",
+    monthly_media_budget: client.monthly_media_budget == null ? "" : String(client.monthly_media_budget),
+    onboarding_status: client.onboarding_status, status: client.status, notes: client.notes ?? "",
+    can_manage: client.can_manage,
+  };
+}
+
+function clientPayload(form: ClientForm) {
+  const optional = (value: string) => value.trim() || null;
+  return {
+    name: form.name.trim(), legal_name: optional(form.legal_name), tax_id_type: form.tax_id_type,
+    tax_id: optional(form.tax_id), segment: form.segment.trim(), niche: form.niche.trim(),
+    business_model: form.business_model, primary_audience: optional(form.primary_audience),
+    website: optional(form.website), contact_name: optional(form.contact_name),
+    contact_email: optional(form.contact_email), contact_phone: optional(form.contact_phone),
+    city: optional(form.city), state: optional(form.state), country_code: form.country_code.toUpperCase(),
+    timezone: form.timezone.trim(), currency: form.currency.toUpperCase(), primary_goal: optional(form.primary_goal),
+    monthly_media_budget: form.monthly_media_budget ? Number(form.monthly_media_budget) : null,
+    onboarding_status: form.onboarding_status, status: form.status, notes: optional(form.notes),
+  };
+}
+
 function FieldHelp({ text }: { text: string }) {
   return <span className="field-help" tabIndex={0} aria-label={text}>?<span role="tooltip">{text}</span></span>;
 }
 
-function SettingsPanel({ token, clients, userEmail, onUpdatePassword }: { token: string; clients: Client[]; userEmail: string; onUpdatePassword: (password: string) => Promise<void> }) {
+function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsChanged }: { token: string; clients: Client[]; userEmail: string; onUpdatePassword: (password: string) => Promise<void>; onClientsChanged: (clients: Client[]) => void }) {
   const [data, setData] = useState<SettingsData | null>(null);
   const [section, setSection] = useState<SettingsSection>("meta");
   const [message, setMessage] = useState("");
@@ -233,12 +283,28 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword }: { token:
   const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
   const [meta, setMeta] = useState({ client_id: clients[0]?.id ?? "", connection_name: "Meta Ads", ad_account_id: "", business_id: "", access_token: "" });
   const [system, setSystem] = useState({ meta_app_id: "", meta_app_secret: "", system_user_id: "", graph_version: "v25.0", openai_api_key: "" });
+  const [managedClients, setManagedClients] = useState<ManagedClient[]>([]);
+  const [clientForm, setClientForm] = useState<ClientForm>(emptyClientForm);
 
   const refresh = useCallback(async () => setData(await apiGet<SettingsData>("/api/v1/settings", token)), [token]);
   useEffect(() => {
     const timeout = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timeout);
   }, [refresh]);
+  const refreshClients = useCallback(async () => {
+    const rows = await apiGet<ManagedClient[]>("/api/v1/settings/clients", token);
+    setManagedClients(rows);
+    onClientsChanged(rows);
+    setClientForm((current) => {
+      if (!rows.length) return emptyClientForm;
+      const selected = rows.find((item) => item.id === current.id) ?? rows[0];
+      return formFromClient(selected);
+    });
+  }, [onClientsChanged, token]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void refreshClients().catch((cause) => setMessage(cause instanceof Error ? cause.message : "Não foi possível carregar os clientes.")), 0);
+    return () => window.clearTimeout(timeout);
+  }, [refreshClients]);
 
   async function saveMeta(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
@@ -278,6 +344,21 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword }: { token:
     } finally { setBusy(false); }
   }
 
+  async function saveClient(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try {
+      const payload = clientPayload(clientForm);
+      const saved = clientForm.id
+        ? await apiPatch<ManagedClient>(`/api/v1/settings/clients/${clientForm.id}`, token, payload)
+        : await apiPost<ManagedClient>("/api/v1/settings/clients", token, payload);
+      const next = [...managedClients.filter((item) => item.id !== saved.id), saved]
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+      setManagedClients(next); onClientsChanged(next); setClientForm(formFromClient(saved));
+      setMessage(clientForm.id ? "Cadastro do cliente atualizado." : "Cliente cadastrado e vinculado ao seu acesso.");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar o cliente."); }
+    finally { setBusy(false); }
+  }
+
   const configured = (provider: string, clientId?: string) => data?.credentials.find((item) => item.provider === provider && (!clientId || item.client_id === clientId));
   const metaStatus = configured("META_CLIENT", meta.client_id);
   const configText = (key: string) => typeof metaStatus?.config[key] === "string" ? String(metaStatus.config[key]) : "Não informado";
@@ -288,7 +369,7 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword }: { token:
   return <section className="settings-page"><header><div><p className="eyebrow coral">AJUSTES</p><h1>Configurações</h1><p>Organize conexões e preferências com explicações em cada campo.</p></div></header>
     {message && <div className="settings-message">{message}</div>}
     <div className="settings-layout"><nav className="settings-nav">
-      <strong>Conta</strong>{menu("general", "Geral")}{menu("users", "Usuários", true)}{menu("clients", "Clientes", true)}
+      <strong>Conta</strong>{menu("general", "Geral")}{menu("users", "Usuários", true)}{menu("clients", "Clientes")}
       <strong>Integrações</strong>{menu("meta", "Meta Ads")}{menu("ai", "Inteligência Artificial")}{menu("crm", "CRM", true)}{menu("webhooks", "Webhooks", true)}
       {data?.system_admin && <><strong>Sistema</strong>{menu("meta-app", "Aplicativo Meta")}{menu("api", "API e serviços")}{menu("security", "Segurança")}</>}
     </nav><div className="settings-content">
@@ -313,7 +394,40 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword }: { token:
       </form>}
       {section === "general" && <div className="settings-account-stack"><div className="settings-card"><div className="settings-card-head"><div><h2>Sua conta</h2><p>Informações do acesso atual ao DescompliADS.</p></div><span className="connection-ok">Protegido</span></div><dl className="connection-summary account-summary"><div><dt>Usuário</dt><dd>{userEmail.split("@")[0]}</dd></div><div><dt>E-mail</dt><dd>{userEmail}</dd></div><div><dt>Situação</dt><dd><i /> Acesso ativo</dd></div></dl></div><form className="settings-card password-card" onSubmit={changeAccountPassword}><div><p className="eyebrow coral">SEGURANÇA DA CONTA</p><h2>Alterar senha</h2><p>Crie uma nova senha para os próximos acessos.</p></div><label><span>Nova senha <FieldHelp text="Use pelo menos 8 caracteres e evite senhas usadas em outros serviços." /></span><input type="password" value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label><label><span>Confirme a nova senha</span><input type="password" value={accountPasswordConfirmation} onChange={(event) => setAccountPasswordConfirmation(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Digite a senha novamente" /></label><div className="secret-note">A senha é atualizada pelo Supabase e não fica armazenada no DescompliADS.</div><button disabled={busy}>{busy ? "Alterando…" : "Alterar minha senha"}</button></form></div>}
       {section === "users" && placeholder("Usuários", "Convites, funções e permissões de acesso.")}
-      {section === "clients" && placeholder("Clientes", "Cadastro e organização dos clientes atendidos.")}
+      {section === "clients" && <div className="client-manager">
+        <div className="client-list-card">
+          <div className="client-list-head"><div><p className="eyebrow coral">CARTEIRA</p><h2>Clientes</h2></div>{data?.system_admin && <button type="button" onClick={() => setClientForm({ ...emptyClientForm })}>Novo cliente</button>}</div>
+          <p className="client-list-intro">Selecione uma empresa para completar ou revisar o cadastro.</p>
+          <div className="client-list">{managedClients.map((item) => <button type="button" key={item.id} className={clientForm.id === item.id ? "active" : ""} onClick={() => setClientForm(formFromClient(item))}><span><strong>{item.name}</strong><small>{item.segment} · {item.niche}</small></span><em className={item.status === "ACTIVE" ? "active" : "archived"}>{item.status === "ACTIVE" ? "Ativo" : "Arquivado"}</em></button>)}{managedClients.length === 0 && <div className="client-list-empty">Nenhum cliente cadastrado.</div>}</div>
+        </div>
+        <form className="settings-card client-editor" onSubmit={saveClient}>
+          <div className="settings-card-head"><div><h2>{clientForm.id ? "Cadastro do cliente" : "Novo cliente"}</h2><p>Informações usadas para organizar contas, análises e atendimento.</p></div><span className={clientForm.status === "ACTIVE" ? "connection-ok" : "connection-pending"}>{clientForm.status === "ACTIVE" ? "Ativo" : "Arquivado"}</span></div>
+          {!clientForm.can_manage && <div className="restricted-box">Seu acesso permite consultar este cliente, mas não alterar o cadastro.</div>}
+          <fieldset disabled={!clientForm.can_manage || busy}><legend>Empresa</legend>
+            <div className="form-row"><label><span>Nome da empresa <FieldHelp text="Nome curto que aparecerá nos filtros e relatórios." /></span><input value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} required placeholder="Ex.: Odisséia Imóveis" /></label><label><span>Razão social <small>opcional</small></span><input value={clientForm.legal_name} onChange={(e) => setClientForm({ ...clientForm, legal_name: e.target.value })} /></label></div>
+            <div className="form-row"><label><span>Tipo de documento</span><select value={clientForm.tax_id_type} onChange={(e) => setClientForm({ ...clientForm, tax_id_type: e.target.value as ClientForm["tax_id_type"] })}><option value="CNPJ">CNPJ</option><option value="CPF">CPF</option><option value="OTHER">Outro</option></select></label><label><span>Documento <small>opcional</small></span><input value={clientForm.tax_id} onChange={(e) => setClientForm({ ...clientForm, tax_id: e.target.value })} placeholder="Somente para identificação interna" /></label></div>
+            <label><span>Site <small>opcional</small></span><input type="url" value={clientForm.website} onChange={(e) => setClientForm({ ...clientForm, website: e.target.value })} placeholder="https://empresa.com.br" /></label>
+          </fieldset>
+          <fieldset disabled={!clientForm.can_manage || busy}><legend>Mercado e estratégia</legend>
+            <div className="form-row"><label><span>Segmento <FieldHelp text="Setor amplo em que a empresa atua, como Imobiliário, Saúde ou Varejo." /></span><input list="client-segments" value={clientForm.segment} onChange={(e) => setClientForm({ ...clientForm, segment: e.target.value })} required placeholder="Ex.: Imobiliário" /><datalist id="client-segments"><option value="Imobiliário" /><option value="Saúde" /><option value="Educação" /><option value="Varejo" /><option value="Serviços profissionais" /><option value="Tecnologia" /><option value="Alimentação" /></datalist></label><label><span>Nicho <FieldHelp text="Recorte específico do segmento, como Imóveis MCMV, Odontologia estética ou Moda feminina." /></span><input value={clientForm.niche} onChange={(e) => setClientForm({ ...clientForm, niche: e.target.value })} required placeholder="Ex.: Imóveis MCMV" /></label></div>
+            <div className="form-row"><label><span>Modelo de negócio</span><select value={clientForm.business_model} onChange={(e) => setClientForm({ ...clientForm, business_model: e.target.value as ClientForm["business_model"] })}><option value="B2C">Vende para consumidor (B2C)</option><option value="B2B">Vende para empresas (B2B)</option><option value="B2B2C">Empresas e consumidor (B2B2C)</option><option value="LOCAL_SERVICES">Serviço local</option><option value="OTHER">Outro</option></select></label><label><span>Objetivo principal</span><input value={clientForm.primary_goal} onChange={(e) => setClientForm({ ...clientForm, primary_goal: e.target.value })} placeholder="Ex.: gerar visitas qualificadas" /></label></div>
+            <label><span>Público principal <FieldHelp text="Descreva brevemente quem compra, região, faixa de renda e necessidade principal." /></span><textarea value={clientForm.primary_audience} onChange={(e) => setClientForm({ ...clientForm, primary_audience: e.target.value })} rows={3} placeholder="Ex.: famílias de Porto Alegre buscando primeiro imóvel" /></label>
+            <label><span>Investimento mensal planejado <small>opcional</small></span><input type="number" min="0" step="0.01" value={clientForm.monthly_media_budget} onChange={(e) => setClientForm({ ...clientForm, monthly_media_budget: e.target.value })} placeholder="0,00" /></label>
+          </fieldset>
+          <fieldset disabled={!clientForm.can_manage || busy}><legend>Contato e localização</legend>
+            <div className="form-row"><label><span>Responsável</span><input value={clientForm.contact_name} onChange={(e) => setClientForm({ ...clientForm, contact_name: e.target.value })} /></label><label><span>Telefone ou WhatsApp</span><input type="tel" value={clientForm.contact_phone} onChange={(e) => setClientForm({ ...clientForm, contact_phone: e.target.value })} /></label></div>
+            <label><span>E-mail de contato</span><input type="email" value={clientForm.contact_email} onChange={(e) => setClientForm({ ...clientForm, contact_email: e.target.value })} /></label>
+            <div className="form-row"><label><span>Cidade</span><input value={clientForm.city} onChange={(e) => setClientForm({ ...clientForm, city: e.target.value })} /></label><label><span>Estado</span><input value={clientForm.state} onChange={(e) => setClientForm({ ...clientForm, state: e.target.value })} /></label></div>
+            <div className="form-row"><label><span>País</span><input maxLength={2} value={clientForm.country_code} onChange={(e) => setClientForm({ ...clientForm, country_code: e.target.value.toUpperCase() })} /></label><label><span>Fuso horário</span><select value={clientForm.timezone} onChange={(e) => setClientForm({ ...clientForm, timezone: e.target.value })}><option value="America/Sao_Paulo">Brasília / São Paulo</option><option value="America/Manaus">Manaus</option><option value="America/Cuiaba">Cuiabá</option><option value="America/Rio_Branco">Rio Branco</option></select></label></div>
+          </fieldset>
+          <fieldset disabled={!clientForm.can_manage || busy}><legend>Operação</legend>
+            <div className="form-row"><label><span>Etapa de implantação</span><select value={clientForm.onboarding_status} onChange={(e) => setClientForm({ ...clientForm, onboarding_status: e.target.value as ClientForm["onboarding_status"] })}><option value="NEW">Novo cadastro</option><option value="SETUP">Em configuração</option><option value="ACTIVE">Operação ativa</option><option value="PAUSED">Operação pausada</option></select></label><label><span>Moeda</span><select value={clientForm.currency} onChange={(e) => setClientForm({ ...clientForm, currency: e.target.value })}><option value="BRL">Real brasileiro (BRL)</option><option value="USD">Dólar (USD)</option><option value="EUR">Euro (EUR)</option></select></label></div>
+            {clientForm.id && <label><span>Situação do cadastro <FieldHelp text="Arquivar mantém campanhas e métricas históricas disponíveis, mas retira o cliente da operação ativa." /></span><select value={clientForm.status} onChange={(e) => setClientForm({ ...clientForm, status: e.target.value as ClientForm["status"] })}><option value="ACTIVE">Ativo</option><option value="ARCHIVED">Arquivado</option></select></label>}
+            <label><span>Observações internas</span><textarea value={clientForm.notes} onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })} rows={4} placeholder="Contexto útil para atendimento, mídia e análise." /></label>
+          </fieldset>
+          {clientForm.can_manage && <div className="client-form-actions"><small>{clientForm.id ? "As alterações afetam somente o cadastro; nenhum dado é enviado para a Meta." : "O novo cliente será vinculado ao seu usuário como proprietário."}</small><button disabled={busy || !clientForm.name || !clientForm.segment || !clientForm.niche}>{busy ? "Salvando…" : clientForm.id ? "Salvar alterações" : "Cadastrar cliente"}</button></div>}
+        </form>
+      </div>}
       {section === "crm" && placeholder("CRM", "Conexões com ferramentas comerciais e atendimento.")}
       {section === "webhooks" && placeholder("Webhooks", "Avisos automáticos enviados para outros sistemas.")}
       {section === "api" && <div className="settings-card"><h2>API e serviços</h2><p>As credenciais técnicas são administradas no ambiente seguro da VPS e não aparecem no navegador.</p><div className="secret-note">Os prompts de análise também são configuração exclusiva dos desenvolvedores: não possuem formulário, endpoint público ou opção de edição no painel.</div></div>}
@@ -483,7 +597,7 @@ export default function Home() {
 
   return <main className="app-shell">
     <aside><div className="logo"><div className="brand-mark small">D</div><div><strong>DescompliADS</strong><small>Growth Intelligence</small></div></div><nav aria-label="Navegação principal"><button className={view === "dashboard" ? "active" : ""} aria-current={view === "dashboard" ? "page" : undefined} onClick={() => navigate("dashboard")}>◫ <span>Visão geral</span></button><button className={view === "campaigns" ? "active" : ""} aria-current={view === "campaigns" ? "page" : undefined} onClick={() => navigate("campaigns")}>◎ <span>Campanhas</span></button><button className={view === "analyses" ? "active" : ""} aria-current={view === "analyses" ? "page" : undefined} onClick={() => navigate("analyses")}>◇ <span>Análises</span></button><button className={view === "settings" ? "active" : ""} aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>⚙ <span>Ajustes</span></button></nav><div className="sidebar-foot"><span className="status-dot" /> Sistema conectado<button onClick={() => supabase.auth.signOut()}>Sair</button></div></aside>
-    {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} onUpdatePassword={updateAuthenticatedPassword} /></section> : <section className="workspace" id="dashboard-top"><header><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{pageCopy.title}</h1><p>{pageCopy.subtitle}</p></div></header>
+    {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} onUpdatePassword={updateAuthenticatedPassword} onClientsChanged={setClients} /></section> : <section className="workspace" id="dashboard-top"><header><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{pageCopy.title}</h1><p>{pageCopy.subtitle}</p></div></header>
       <section className="filters"><div className="filter-heading"><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div><label>Período<select value={filters.days} onChange={(e) => updateFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => updateFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => updateFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => updateFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => void loadData()}>Tentar novamente</button></div>}
       {loading && !dashboard && <section className="dashboard-loading" aria-label="Carregando painel"><div /><div /><div /><div /></section>}
