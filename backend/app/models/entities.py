@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
-EntityStatus = Literal["ACTIVE", "ARCHIVED"]
+EntityStatus = Literal["ACTIVE", "PAUSED", "ARCHIVED"]
 T = TypeVar("T")
 
 
@@ -42,6 +42,12 @@ class CampaignRead(ApiModel):
     meta_campaign_id: str
     name: str
     objective: str | None = None
+    buying_type: str | None = None
+    daily_budget: Decimal | None = None
+    lifetime_budget: Decimal | None = None
+    budget_remaining: Decimal | None = None
+    start_time: datetime | None = None
+    stop_time: datetime | None = None
     status: EntityStatus
     meta_created_at: datetime | None = None
     meta_updated_at: datetime | None = None
@@ -59,6 +65,9 @@ class AdsetRead(ApiModel):
     billing_event: str | None = None
     daily_budget: Decimal | None = None
     lifetime_budget: Decimal | None = None
+    budget_remaining: Decimal | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     meta_created_at: datetime | None = None
     meta_updated_at: datetime | None = None
     created_at: datetime
@@ -72,6 +81,16 @@ class AdRead(ApiModel):
     name: str
     status: EntityStatus
     creative_id: str | None = None
+    creative_name: str | None = None
+    creative_type: str | None = None
+    thumbnail_url: str | None = None
+    image_url: str | None = None
+    video_id: str | None = None
+    video_duration_seconds: Decimal | None = None
+    primary_text: str | None = None
+    headline: str | None = None
+    call_to_action_type: str | None = None
+    destination_url: str | None = None
     meta_created_at: datetime | None = None
     meta_updated_at: datetime | None = None
     created_at: datetime
@@ -94,14 +113,37 @@ class DashboardMetrics(ApiModel):
     link_clicks: int = 0
     leads: int = 0
     conversations: int = 0
+    landing_page_views: int = 0
+    video_views_3s: int = 0
+    video_plays: int = 0
+    video_p25: int = 0
+    video_p50: int = 0
+    video_p75: int = 0
+    video_p95: int = 0
+    thruplays: int = 0
     cpl: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6, examples=[12.5])
     ctr: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=6)
     cpc: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6)
     cpm: Decimal | None = Field(None, ge=0, max_digits=14, decimal_places=6)
     link_ctr: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=6)
     frequency: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=6)
+    landing_page_view_rate: Decimal | None = None
+    cost_per_landing_page_view: Decimal | None = None
+    landing_page_conversion_rate: Decimal | None = None
+    hook_rate: Decimal | None = None
+    thruplay_rate: Decimal | None = None
+    video_p25_rate: Decimal | None = None
+    video_p50_rate: Decimal | None = None
+    video_p75_rate: Decimal | None = None
+    video_p95_rate: Decimal | None = None
 
-    @field_serializer("spend", "cpl", "ctr", "cpc", "cpm", "link_ctr", "frequency", when_used="json")
+    @field_serializer(
+        "spend", "cpl", "ctr", "cpc", "cpm", "link_ctr", "frequency",
+        "landing_page_view_rate", "cost_per_landing_page_view",
+        "landing_page_conversion_rate", "hook_rate", "thruplay_rate",
+        "video_p25_rate", "video_p50_rate", "video_p75_rate", "video_p95_rate",
+        when_used="json",
+    )
     def serialize_money(self, value: Decimal | None) -> float | None:
         return float(value) if value is not None else None
 
@@ -126,9 +168,106 @@ class MetricsComparison(ApiModel):
     cpm: Decimal | None = None
     link_ctr: Decimal | None = None
     frequency: Decimal | None = None
+    landing_page_views: Decimal | None = None
+    video_views_3s: Decimal | None = None
+    thruplays: Decimal | None = None
+    landing_page_view_rate: Decimal | None = None
+    cost_per_landing_page_view: Decimal | None = None
+    landing_page_conversion_rate: Decimal | None = None
+    hook_rate: Decimal | None = None
+    thruplay_rate: Decimal | None = None
 
     @field_serializer("*", when_used="json")
     def serialize_percent(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class InvestmentPacing(ApiModel):
+    currency: str | None = None
+    monthly_budget: Decimal | None = None
+    spent: Decimal = Decimal("0")
+    remaining: Decimal | None = None
+    percent_consumed: Decimal | None = None
+    projected_spend: Decimal | None = None
+    projected_percent: Decimal | None = None
+    expected_spend_to_date: Decimal | None = None
+    variance_to_expected: Decimal | None = None
+    elapsed_percent: Decimal
+    days_elapsed: int
+    days_in_month: int
+    pace_status: Literal["NOT_CONFIGURED", "BELOW", "ON_TRACK", "ABOVE"]
+
+    @field_serializer(
+        "monthly_budget", "spent", "remaining", "percent_consumed",
+        "projected_spend", "projected_percent", "expected_spend_to_date",
+        "variance_to_expected", "elapsed_percent", when_used="json",
+    )
+    def serialize_decimal(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class AdOperation(ApiModel):
+    id: UUID
+    adset_id: UUID
+    name: str
+    status: EntityStatus
+    creative_type: str | None = None
+    thumbnail_url: str | None = None
+    image_url: str | None = None
+    video_duration_seconds: Decimal | None = None
+    primary_text: str | None = None
+    headline: str | None = None
+    call_to_action_type: str | None = None
+    destination_url: str | None = None
+    metrics: DashboardMetrics
+
+    @field_serializer("video_duration_seconds", when_used="json")
+    def serialize_duration(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class AdsetOperation(ApiModel):
+    id: UUID
+    campaign_id: UUID
+    name: str
+    status: EntityStatus
+    optimization_goal: str | None = None
+    daily_budget: Decimal | None = None
+    lifetime_budget: Decimal | None = None
+    configured_budget: Decimal | None = None
+    budget_type: Literal["DAILY_PERIOD", "LIFETIME"] | None = None
+    budget_utilization: Decimal | None = None
+    metrics: DashboardMetrics
+    ads: list[AdOperation] = Field(default_factory=list)
+
+    @field_serializer(
+        "daily_budget", "lifetime_budget", "configured_budget",
+        "budget_utilization", when_used="json",
+    )
+    def serialize_budget(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+class CampaignOperation(ApiModel):
+    id: UUID
+    meta_account_id: UUID
+    name: str
+    objective: str | None = None
+    status: EntityStatus
+    daily_budget: Decimal | None = None
+    lifetime_budget: Decimal | None = None
+    configured_budget: Decimal | None = None
+    budget_type: Literal["DAILY_PERIOD", "LIFETIME"] | None = None
+    budget_utilization: Decimal | None = None
+    has_delivery: bool
+    metrics: DashboardMetrics
+    adsets: list[AdsetOperation] = Field(default_factory=list)
+
+    @field_serializer(
+        "daily_budget", "lifetime_budget", "configured_budget",
+        "budget_utilization", when_used="json",
+    )
+    def serialize_budget(self, value: Decimal | None) -> float | None:
         return float(value) if value is not None else None
 
 
@@ -143,6 +282,8 @@ class DashboardRead(ApiModel):
     metrics: DashboardMetrics
     previous_metrics: DashboardMetrics
     change_percent: MetricsComparison
+    investment_pacing: InvestmentPacing
+    campaign_operations: list[CampaignOperation]
     daily_series: list["DailyMetricPoint"]
     campaign_ranking: list["CampaignPerformance"]
     adset_ranking: list["EntityPerformance"]
@@ -309,6 +450,14 @@ class BaseMetricRead(ApiModel):
     cpl: Decimal | None = None
     conversations: int
     cost_per_conversation: Decimal | None = None
+    landing_page_views: int = 0
+    video_views_3s: int = 0
+    video_plays: int = 0
+    video_p25: int = 0
+    video_p50: int = 0
+    video_p75: int = 0
+    video_p95: int = 0
+    thruplays: int = 0
     created_at: datetime
     updated_at: datetime
 

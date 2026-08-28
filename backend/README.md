@@ -251,3 +251,18 @@ do sistema e usuários `OWNER` ou `ADMIN` podem editar os clientes autorizados.
 
 Clientes históricos não são excluídos. Use `status = ARCHIVED`; campanhas,
 contas e métricas permanecem vinculadas e disponíveis para análise histórica.
+
+## Gestão operacional de mídia
+
+Após aplicar `supabase/migrations/0018_traffic_manager_operations.sql`, o
+dashboard também devolve:
+
+- ritmo do orçamento mensal, saldo, consumo e projeção;
+- orçamento configurado e gasto real por campanha e conjunto;
+- hierarquia completa de campanhas, conjuntos e anúncios, inclusive sem entrega;
+- dados do criativo (miniatura, formato, texto, título, CTA e duração);
+- LPV, custo e taxa de chegada à página, Hook Rate, ThruPlay e retenção de vídeo.
+
+Os campos são atualizados pela sincronização Meta já existente. Entidades que
+deixam de operar continuam preservadas como `ARCHIVED`; itens pausados são
+identificados como `PAUSED` para permitir o filtro operacional.

@@ -29,6 +29,7 @@ class MetaSyncService:
     def __init__(self, supabase: Client, meta: MetaGraphClient) -> None:
         self.supabase = supabase
         self.meta = meta
+        self._video_duration_cache: dict[str, str | None] = {}
 
     def sync_account(self, client_id: UUID, account_id: str) -> dict[str, int]:
         normalized_id = account_id.removeprefix("act_")
@@ -162,6 +163,12 @@ class MetaSyncService:
                     "meta_campaign_id": row["id"],
                     "name": row.get("name") or row["id"],
                     "objective": row.get("objective"),
+                    "buying_type": row.get("buying_type"),
+                    "daily_budget": cents_to_decimal(row.get("daily_budget")),
+                    "lifetime_budget": cents_to_decimal(row.get("lifetime_budget")),
+                    "budget_remaining": cents_to_decimal(row.get("budget_remaining")),
+                    "start_time": row.get("start_time"),
+                    "stop_time": row.get("stop_time"),
                     "status": entity_status(row.get("effective_status")),
                     "meta_created_at": row.get("created_time"),
                     "meta_updated_at": row.get("updated_time"),
@@ -197,6 +204,9 @@ class MetaSyncService:
                     "billing_event": row.get("billing_event"),
                     "daily_budget": cents_to_decimal(row.get("daily_budget")),
                     "lifetime_budget": cents_to_decimal(row.get("lifetime_budget")),
+                    "budget_remaining": cents_to_decimal(row.get("budget_remaining")),
+                    "start_time": row.get("start_time"),
+                    "end_time": row.get("end_time"),
                     "meta_created_at": row.get("created_time"),
                     "meta_updated_at": row.get("updated_time"),
                     "updated_at": now_iso(),
@@ -222,6 +232,9 @@ class MetaSyncService:
             if not adset_id:
                 continue
             creative = row.get("creative") or {}
+            details = creative_details(creative)
+            video_id = details.get("video_id")
+            video_duration = self._video_duration(str(video_id)) if video_id else None
             _, created = self._upsert_one(
                 "ads",
                 {
@@ -230,6 +243,8 @@ class MetaSyncService:
                     "name": row.get("name") or row["id"],
                     "status": entity_status(row.get("effective_status")),
                     "creative_id": creative.get("id"),
+                    **details,
+                    "video_duration_seconds": video_duration,
                     "meta_created_at": row.get("created_time"),
                     "meta_updated_at": row.get("updated_time"),
                     "updated_at": now_iso(),
@@ -243,6 +258,21 @@ class MetaSyncService:
                 "ads", "adset_id", adset_id, "meta_ad_id", present
             )
         return changes
+
+    def _video_duration(self, video_id: str) -> str | None:
+        if video_id in self._video_duration_cache:
+            return self._video_duration_cache[video_id]
+        getter = getattr(self.meta, "get_video_details", None)
+        if not callable(getter):
+            return None
+        try:
+            payload = getter(video_id)
+            length = payload.get("length")
+            value = None if length in (None, "") else str(Decimal(str(length)))
+        except (MetaGraphError, ValueError, TypeError):
+            value = None
+        self._video_duration_cache[video_id] = value
+        return value
 
     def _upsert_one(
         self, table: str, payload: dict[str, Any], conflict_column: str
@@ -309,7 +339,12 @@ def change_stats(created: bool | None = None) -> dict[str, int]:
 
 
 def entity_status(effective_status: Any) -> str:
-    return "ACTIVE" if effective_status == "ACTIVE" else "ARCHIVED"
+    normalized = str(effective_status or "").upper()
+    if normalized == "ACTIVE":
+        return "ACTIVE"
+    if normalized in {"PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"}:
+        return "PAUSED"
+    return "ARCHIVED"
 
 
 def account_status(account_status_value: Any) -> str:
@@ -361,6 +396,14 @@ def metrics_payload(
         "cost_per_conversation": costs.get(
             "onsite_conversion.messaging_conversation_started_7d"
         ),
+        "landing_page_views": int(float(actions.get("landing_page_view", 0))),
+        "video_views_3s": action_total(row.get("video_3_sec_watched_actions")),
+        "video_plays": action_total(row.get("video_play_actions")),
+        "video_p25": action_total(row.get("video_p25_watched_actions")),
+        "video_p50": action_total(row.get("video_p50_watched_actions")),
+        "video_p75": action_total(row.get("video_p75_watched_actions")),
+        "video_p95": action_total(row.get("video_p95_watched_actions")),
+        "thruplays": action_total(row.get("video_thruplay_watched_actions")),
         "updated_at": now_iso(),
     }
 
@@ -398,6 +441,48 @@ def action_map(values: Any) -> dict[str, str]:
         str(item.get("action_type")): str(item.get("value"))
         for item in values or []
         if item.get("action_type") and item.get("value") is not None
+    }
+
+
+def action_total(values: Any) -> int:
+    return int(sum(Decimal(str(item.get("value") or 0)) for item in values or []))
+
+
+def creative_details(creative: dict[str, Any]) -> dict[str, Any]:
+    story = creative.get("object_story_spec") or {}
+    video_data = story.get("video_data") or {}
+    link_data = story.get("link_data") or {}
+    photo_data = story.get("photo_data") or {}
+    call_to_action = (
+        video_data.get("call_to_action")
+        or link_data.get("call_to_action")
+        or photo_data.get("call_to_action")
+        or {}
+    )
+    call_value = call_to_action.get("value") or {}
+    video_id = creative.get("video_id") or video_data.get("video_id")
+    creative_type = creative.get("object_type")
+    if not creative_type:
+        creative_type = "VIDEO" if video_id else "IMAGE" if (
+            creative.get("image_url") or link_data.get("picture") or photo_data
+        ) else "UNKNOWN"
+    return {
+        "creative_name": creative.get("name"),
+        "creative_type": str(creative_type),
+        "thumbnail_url": creative.get("thumbnail_url") or link_data.get("picture"),
+        "image_url": creative.get("image_url") or link_data.get("picture"),
+        "video_id": str(video_id) if video_id else None,
+        "primary_text": (
+            creative.get("body") or video_data.get("message")
+            or link_data.get("message") or photo_data.get("message")
+        ),
+        "headline": (
+            creative.get("title") or video_data.get("title") or link_data.get("name")
+        ),
+        "call_to_action_type": (
+            creative.get("call_to_action_type") or call_to_action.get("type")
+        ),
+        "destination_url": call_value.get("link") or link_data.get("link"),
     }
 
 

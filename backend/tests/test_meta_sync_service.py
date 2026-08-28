@@ -8,7 +8,9 @@ from app.services.meta_graph_client import MetaGraphError
 from app.services.meta_sync_service import (
     MetaSyncService,
     action_map,
+    action_total,
     cents_to_decimal,
+    creative_details,
     entity_status,
     metrics_payload,
 )
@@ -131,9 +133,10 @@ class FakeMeta:
         }]
 
 
-def test_non_active_meta_status_is_archived() -> None:
+def test_meta_status_preserves_paused_and_archives_historical_entities() -> None:
     assert entity_status("ACTIVE") == "ACTIVE"
-    assert entity_status("PAUSED") == "ARCHIVED"
+    assert entity_status("PAUSED") == "PAUSED"
+    assert entity_status("CAMPAIGN_PAUSED") == "PAUSED"
     assert entity_status("DELETED") == "ARCHIVED"
 
 
@@ -144,6 +147,26 @@ def test_meta_budget_cents_are_converted() -> None:
 
 def test_action_map_extracts_meta_action_values() -> None:
     assert action_map([{"action_type": "lead", "value": "3"}]) == {"lead": "3"}
+
+
+def test_action_total_sums_video_and_page_events() -> None:
+    assert action_total([{"value": "3"}, {"value": "2"}]) == 5
+
+
+def test_creative_details_normalizes_video_content() -> None:
+    details = creative_details({
+        "name": "Criativo A", "thumbnail_url": "https://example.com/thumb.jpg",
+        "object_story_spec": {"video_data": {
+            "video_id": "video-1", "message": "Texto principal", "title": "Título",
+            "call_to_action": {"type": "LEARN_MORE", "value": {"link": "https://example.com"}},
+        }},
+    })
+    assert details == {
+        "creative_name": "Criativo A", "creative_type": "VIDEO",
+        "thumbnail_url": "https://example.com/thumb.jpg", "image_url": None,
+        "video_id": "video-1", "primary_text": "Texto principal", "headline": "Título",
+        "call_to_action_type": "LEARN_MORE", "destination_url": "https://example.com",
+    }
 
 
 def test_metrics_payload_maps_daily_values_for_upsert() -> None:

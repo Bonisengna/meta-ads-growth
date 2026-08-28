@@ -13,7 +13,9 @@ from app.services.entity_services import (
     aggregate_metrics,
     build_insights,
     build_recommendations,
+    build_investment_pacing,
     compare_metrics,
+    configured_budget,
     resolve_periods,
 )
 
@@ -120,18 +122,50 @@ def test_period_rejects_incomplete_or_reversed_dates() -> None:
 def test_aggregate_calculates_business_metrics() -> None:
     result = aggregate_metrics([
         {"spend": "30", "impressions": 1000, "reach": 800, "clicks": 50,
-         "link_clicks": 40, "leads": 2, "conversations": 3},
+         "link_clicks": 40, "leads": 2, "conversations": 3, "frequency": "1.2",
+         "landing_page_views": 30, "video_views_3s": 300, "video_plays": 250,
+         "video_p25": 200, "video_p50": 150, "video_p75": 100, "video_p95": 50,
+         "thruplays": 75},
         {"spend": "15", "impressions": 500, "reach": 400, "clicks": 10,
-         "link_clicks": 5, "leads": 1, "conversations": 1},
+         "link_clicks": 5, "leads": 1, "conversations": 1, "frequency": "1.35",
+         "landing_page_views": 5, "video_views_3s": 100, "video_plays": 100,
+         "video_p25": 80, "video_p50": 60, "video_p75": 40, "video_p95": 20,
+         "thruplays": 25},
     ])
-    assert result == {
-        "spend": Decimal("45"), "impressions": 1500, "reach": 1200,
-        "clicks": 60, "link_clicks": 45,
-        "leads": 3, "conversations": 4, "cpl": Decimal("15.000000"),
-        "ctr": Decimal("4.000000"), "cpc": Decimal("0.750000"),
-        "cpm": Decimal("30.000000"), "link_ctr": Decimal("3.000000"),
-        "frequency": Decimal("1.250000"),
-    }
+    assert result["spend"] == Decimal("45")
+    assert result["frequency"] == Decimal("1.250000")
+    assert result["landing_page_views"] == 35
+    assert result["landing_page_view_rate"] == Decimal("77.777778")
+    assert result["cost_per_landing_page_view"] == Decimal("1.285714")
+    assert result["landing_page_conversion_rate"] == Decimal("8.571429")
+    assert result["hook_rate"] == Decimal("26.666667")
+    assert result["thruplay_rate"] == Decimal("28.571429")
+    assert result["video_p95_rate"] == Decimal("20.000000")
+
+
+def test_budget_helpers_compare_configured_budget_and_real_spend() -> None:
+    assert configured_budget({"daily_budget": "50"}, 7) == (Decimal("350"), "DAILY_PERIOD")
+    assert configured_budget({"lifetime_budget": "900"}, 7) == (Decimal("900"), "LIFETIME")
+    assert configured_budget({}, 7) == (None, None)
+
+
+def test_investment_pacing_projects_month_and_classifies_rhythm() -> None:
+    result = build_investment_pacing(
+        monthly_budget=Decimal("3100"), spent=Decimal("2000"),
+        today=date(2026, 8, 10), currency="BRL",
+    )
+    assert result["remaining"] == Decimal("1100")
+    assert result["projected_spend"] == Decimal("6200.00")
+    assert result["pace_status"] == "ABOVE"
+
+
+def test_investment_pacing_handles_missing_budget() -> None:
+    result = build_investment_pacing(
+        monthly_budget=None, spent=Decimal("100"),
+        today=date(2026, 8, 10), currency="BRL",
+    )
+    assert result["pace_status"] == "NOT_CONFIGURED"
+    assert result["projected_spend"] is None
 
 
 def test_comparison_returns_percent_and_null_for_zero_baseline() -> None:

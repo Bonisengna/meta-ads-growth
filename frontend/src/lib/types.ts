@@ -1,6 +1,6 @@
-export type EntityStatus = "ACTIVE" | "ARCHIVED";
+export type EntityStatus = "ACTIVE" | "PAUSED" | "ARCHIVED";
 export type Page<T> = { items: T[]; page: number; page_size: number; total: number; pages: number };
-export type Client = { id: string; name: string; slug: string; status: EntityStatus };
+export type Client = { id: string; name: string; slug: string; status: "ACTIVE" | "ARCHIVED" };
 export type ManagedClient = Client & {
   legal_name: string | null;
   tax_id_type: "CNPJ" | "CPF" | "OTHER";
@@ -28,7 +28,11 @@ export type ManagedClient = Client & {
 };
 export type MetaAccount = { id: string; client_id: string; name: string; currency: string | null; status: EntityStatus; last_synced_at: string | null };
 export type Campaign = { id: string; meta_account_id: string; name: string; objective: string | null; status: EntityStatus };
-export type Metrics = { spend: number; impressions: number; reach: number; clicks: number; link_clicks: number; leads: number; conversations: number; cpl: number | null; ctr: number | null; cpc: number | null; cpm: number | null; link_ctr: number | null; frequency: number | null };
+export type Metrics = { spend: number; impressions: number; reach: number; clicks: number; link_clicks: number; leads: number; conversations: number; landing_page_views: number; video_views_3s: number; video_plays: number; video_p25: number; video_p50: number; video_p75: number; video_p95: number; thruplays: number; cpl: number | null; ctr: number | null; cpc: number | null; cpm: number | null; link_ctr: number | null; frequency: number | null; landing_page_view_rate: number | null; cost_per_landing_page_view: number | null; landing_page_conversion_rate: number | null; hook_rate: number | null; thruplay_rate: number | null; video_p25_rate: number | null; video_p50_rate: number | null; video_p75_rate: number | null; video_p95_rate: number | null };
+export type InvestmentPacing = { currency: string | null; monthly_budget: number | null; spent: number; remaining: number | null; percent_consumed: number | null; projected_spend: number | null; projected_percent: number | null; expected_spend_to_date: number | null; variance_to_expected: number | null; elapsed_percent: number; days_elapsed: number; days_in_month: number; pace_status: "NOT_CONFIGURED" | "BELOW" | "ON_TRACK" | "ABOVE" };
+export type AdOperation = { id: string; adset_id: string; name: string; status: EntityStatus; creative_type: string | null; thumbnail_url: string | null; image_url: string | null; video_duration_seconds: number | null; primary_text: string | null; headline: string | null; call_to_action_type: string | null; destination_url: string | null; metrics: Metrics };
+export type AdsetOperation = { id: string; campaign_id: string; name: string; status: EntityStatus; optimization_goal: string | null; daily_budget: number | null; lifetime_budget: number | null; configured_budget: number | null; budget_type: "DAILY_PERIOD" | "LIFETIME" | null; budget_utilization: number | null; metrics: Metrics; ads: AdOperation[] };
+export type CampaignOperation = { id: string; meta_account_id: string; name: string; objective: string | null; status: EntityStatus; daily_budget: number | null; lifetime_budget: number | null; configured_budget: number | null; budget_type: "DAILY_PERIOD" | "LIFETIME" | null; budget_utilization: number | null; has_delivery: boolean; metrics: Metrics; adsets: AdsetOperation[] };
 export type BreakdownPoint = { value: string; spend: number; impressions: number; reach: number; link_clicks: number; leads: number; conversations: number; cpa: number | null; conversion_rate: number | null; ctr: number | null; cpm: number | null };
 export type BreakdownAnalytics = { age: BreakdownPoint[]; gender: BreakdownPoint[]; platform: BreakdownPoint[]; placement: BreakdownPoint[]; device: BreakdownPoint[]; region: BreakdownPoint[]; hour: BreakdownPoint[] };
 export type Dashboard = {
@@ -36,6 +40,8 @@ export type Dashboard = {
   period: { date_from: string; date_to: string; days: number };
   previous_period: { date_from: string; date_to: string; days: number };
   metrics: Metrics; previous_metrics: Metrics; change_percent: Record<keyof Metrics, number | null>;
+  investment_pacing: InvestmentPacing;
+  campaign_operations: CampaignOperation[];
   daily_series: Array<{ metric_date: string; spend: number; impressions: number; clicks: number; leads: number; conversations: number }>;
   campaign_ranking: Array<{ campaign_id: string; name: string; status: EntityStatus; spend: number; impressions: number; clicks: number; leads: number; conversations: number; cpl: number | null; ctr: number | null; cpc: number | null; cost_per_conversation: number | null }>;
   adset_ranking: EntityPerformance[];

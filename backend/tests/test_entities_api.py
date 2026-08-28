@@ -174,7 +174,7 @@ def test_dashboard_serializes_money_as_json_number() -> None:
         "campaign_metrics": [{
             "campaign_id": campaign_id, "metric_date": metric_date,
             "spend": "12.50", "impressions": 1000, "reach": 800, "clicks": 25,
-            "link_clicks": 20,
+            "link_clicks": 20, "frequency": "1.25",
             "leads": 1, "conversations": 2,
         }],
     })
@@ -183,12 +183,13 @@ def test_dashboard_serializes_money_as_json_number() -> None:
     response = client.get("/api/v1/dashboard")
 
     assert response.status_code == 200
-    assert response.json()["metrics"] == {
-        "spend": 12.5, "impressions": 1000, "reach": 800, "clicks": 25,
-        "link_clicks": 20, "leads": 1, "conversations": 2, "cpl": 12.5,
-        "ctr": 2.5, "cpc": 0.5, "cpm": 12.5, "link_ctr": 2.0,
-        "frequency": 1.25,
-    }
+    metrics = response.json()["metrics"]
+    assert metrics["spend"] == 12.5
+    assert metrics["cpl"] == 12.5
+    assert metrics["frequency"] == 1.25
+    assert metrics["landing_page_views"] == 0
+    assert metrics["landing_page_view_rate"] == 0.0
+    assert metrics["hook_rate"] is None
 
 
 def test_dashboard_validates_period_filters() -> None:

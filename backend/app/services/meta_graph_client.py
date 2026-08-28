@@ -63,7 +63,11 @@ class MetaGraphClient:
         return list(
             self._paginate(
                 f"/{account_node(account_id)}/campaigns",
-                fields="id,name,objective,effective_status,created_time,updated_time",
+                fields=(
+                    "id,name,objective,buying_type,effective_status,daily_budget,"
+                    "lifetime_budget,budget_remaining,start_time,stop_time,"
+                    "created_time,updated_time"
+                ),
             )
         )
 
@@ -73,7 +77,8 @@ class MetaGraphClient:
                 f"/{account_node(account_id)}/adsets",
                 fields=(
                     "id,campaign_id,name,effective_status,optimization_goal,billing_event,"
-                    "daily_budget,lifetime_budget,created_time,updated_time"
+                    "daily_budget,lifetime_budget,budget_remaining,start_time,end_time,"
+                    "created_time,updated_time"
                 ),
             )
         )
@@ -82,9 +87,18 @@ class MetaGraphClient:
         return list(
             self._paginate(
                 f"/{account_node(account_id)}/ads",
-                fields="id,adset_id,name,effective_status,creative{id},created_time,updated_time",
+                fields=(
+                    "id,adset_id,name,effective_status,"
+                    "creative{id,name,object_type,thumbnail_url,image_url,video_id,"
+                    "title,body,call_to_action_type,object_story_spec},"
+                    "created_time,updated_time"
+                ),
             )
         )
+
+    def get_video_details(self, video_id: str) -> dict[str, Any]:
+        """Return lightweight video metadata used by the creative inspector."""
+        return self._get(f"/{video_id}", params={"fields": "id,length"})
 
     def list_daily_insights(
         self, account_id: str, level: str, since: str, until: str
@@ -96,7 +110,11 @@ class MetaGraphClient:
                 f"/{account_node(account_id)}/insights",
                 fields=(
                     f"{level}_id,date_start,spend,impressions,reach,clicks,inline_link_clicks,"
-                    "ctr,cpc,cpm,frequency,actions,cost_per_action_type"
+                    "ctr,cpc,cpm,frequency,actions,cost_per_action_type,"
+                    "video_play_actions,video_3_sec_watched_actions,"
+                    "video_p25_watched_actions,video_p50_watched_actions,"
+                    "video_p75_watched_actions,video_p95_watched_actions,"
+                    "video_thruplay_watched_actions"
                 ),
                 level=level,
                 time_increment="1",
