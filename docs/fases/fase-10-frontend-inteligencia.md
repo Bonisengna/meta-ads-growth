@@ -26,7 +26,7 @@ ou token Meta. Apenas URL e chave publicável usam o prefixo `NEXT_PUBLIC_`.
 - login e logout;
 - investimento, conversas, leads, CPL, CTR e CPC;
 - comparação com o período anterior;
-- períodos de 7, 14, 30, 90, 120 e 180 dias;
+- períodos de 7, 14, 30, 90, 120, 180 e 360 dias;
 - filtros por cliente, conta e campanha;
 - contagem de campanhas, conjuntos e anúncios;
 - campanhas ativas e arquivadas;

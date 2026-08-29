@@ -45,8 +45,8 @@ class MetaSyncRunner:
         self.now = now
 
     def run(self, lookback_days: int = 3) -> dict[str, Any]:
-        if not 1 <= lookback_days <= 180:
-            raise ValueError("lookback_days deve estar entre 1 e 180")
+        if not 1 <= lookback_days <= 360:
+            raise ValueError("lookback_days deve estar entre 1 e 360")
 
         run = self._acquire(lookback_days)
         started_at = datetime.fromisoformat(run["started_at"])
@@ -54,8 +54,13 @@ class MetaSyncRunner:
             accounts = self._active_accounts()
             results = [self._sync_account(account, lookback_days) for account in accounts]
             successful = sum(result["status"] == "SUCCESS" for result in results)
-            failed = len(results) - successful
-            status = "SUCCESS" if failed == 0 else "FAILED" if successful == 0 else "PARTIAL"
+            partial = sum(result["status"] == "PARTIAL" for result in results)
+            failed = sum(result["status"] == "FAILED" for result in results)
+            status = (
+                "FAILED" if results and failed == len(results)
+                else "PARTIAL" if partial or failed
+                else "SUCCESS"
+            )
             entity_changes = aggregate_entity_changes(results)
             summary = {
                 "run_id": run["id"],
@@ -63,11 +68,12 @@ class MetaSyncRunner:
                 "lookback_days": lookback_days,
                 "accounts_total": len(accounts),
                 "accounts_success": successful,
+                "accounts_partial": partial,
                 "accounts_failed": failed,
                 "entity_changes": entity_changes,
                 "accounts": results,
             }
-            self._update_token_alert(results, successful > 0)
+            self._update_token_alert(results, successful + partial > 0)
             self._finish(run["id"], started_at, summary)
             return summary
         except Exception as exc:
@@ -77,6 +83,7 @@ class MetaSyncRunner:
                 "lookback_days": lookback_days,
                 "accounts_total": 0,
                 "accounts_success": 0,
+                "accounts_partial": 0,
                 "accounts_failed": 0,
                 "accounts": [],
                 "error": safe_error(exc),
@@ -115,12 +122,32 @@ class MetaSyncRunner:
                 self.sleep,
             )
             stage = "breakdowns"
-            breakdowns, breakdown_attempts = retry_transient(
-                lambda: sync.sync_breakdown_metrics(account_id, since, today),
-                self.max_attempts,
-                self.retry_delay_seconds,
-                self.sleep,
-            )
+            try:
+                breakdowns, breakdown_attempts = retry_transient(
+                    lambda: sync.sync_breakdown_metrics(account_id, since, today),
+                    self.max_attempts,
+                    self.retry_delay_seconds,
+                    self.sleep,
+                )
+            except Exception as exc:
+                sync.mark_metrics_synced(account_id, complete=False)
+                result = {
+                    "meta_account_id": account_id,
+                    "name": account.get("name"),
+                    "status": "PARTIAL",
+                    "period": {"date_from": since.isoformat(), "date_to": today.isoformat()},
+                    "attempts": {"entities": entity_attempts, "metrics": metric_attempts},
+                    "entities": entities,
+                    "metrics": metrics,
+                    "breakdowns": {},
+                    "warning_stage": "breakdowns",
+                    "warning": safe_error(exc),
+                }
+                if isinstance(exc, MetaGraphError):
+                    result["warning_code"] = exc.code
+                    result["http_status"] = exc.status_code
+                return result
+            sync.mark_metrics_synced(account_id, complete=True)
             return {
                 "meta_account_id": account_id,
                 "name": account.get("name"),
@@ -253,6 +280,7 @@ class MetaSyncRunner:
                     "duration_ms": duration_ms,
                     "accounts_total": summary["accounts_total"],
                     "accounts_success": summary["accounts_success"],
+                    "accounts_partial": summary.get("accounts_partial", 0),
                     "accounts_failed": summary["accounts_failed"],
                     "result": summary,
                     "error_summary": error,

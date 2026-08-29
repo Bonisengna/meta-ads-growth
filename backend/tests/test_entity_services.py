@@ -105,10 +105,10 @@ def test_custom_period_has_equal_previous_period() -> None:
     assert previous == (date(2025, 10, 2), date(2025, 10, 31))
 
 
-def test_180_day_period_has_equal_previous_period() -> None:
-    current, previous = resolve_periods(180)
-    assert (current[1] - current[0]).days + 1 == 180
-    assert (previous[1] - previous[0]).days + 1 == 180
+def test_360_day_period_has_equal_previous_period() -> None:
+    current, previous = resolve_periods(360)
+    assert (current[1] - current[0]).days + 1 == 360
+    assert (previous[1] - previous[0]).days + 1 == 360
     assert previous[1] == current[0] - date.resolution
 
 

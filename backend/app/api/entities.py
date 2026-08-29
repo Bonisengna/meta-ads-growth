@@ -43,6 +43,7 @@ class DashboardDays(IntEnum):
     DAYS_90 = 90
     DAYS_120 = 120
     DAYS_180 = 180
+    DAYS_360 = 360
 
 
 def not_found(exc: EntityNotFoundError) -> HTTPException:

@@ -23,9 +23,15 @@ O endpoint consulta o protocolo local no Supabase e não consome a Graph API.
 
 ## Contas atrasadas
 
-`META_HEALTH_STALE_HOURS=26` define a tolerância desde `last_synced_at`. O valor
-de 26 horas oferece uma margem de duas horas para uma tarefa diária. A data da
-conta só é atualizada depois que entidades foram sincronizadas com sucesso.
+`META_HEALTH_STALE_HOURS=26` define a tolerância desde
+`last_metrics_synced_at`. O valor de 26 horas oferece uma margem de duas horas
+para uma tarefa diária. O sistema mantém datas distintas para entidades,
+métricas e conclusão total; assim, uma atualização de nomes ou status não
+oculta uma falha na coleta de desempenho.
+
+Se as métricas principais forem gravadas e apenas um detalhamento opcional
+falhar, a conta e a execução ficam como `PARTIAL`. Os números principais
+continuam disponíveis, acompanhados de um aviso de coleta parcial no frontend.
 
 ## Alertas de token
 

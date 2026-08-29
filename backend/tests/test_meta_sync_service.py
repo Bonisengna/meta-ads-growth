@@ -129,7 +129,10 @@ class FakeMeta:
             "campaign_id": "new-campaign", "date_start": "2026-08-15",
             "age": "25-34", "spend": "20", "impressions": "1000",
             "reach": "800", "inline_link_clicks": "25",
-            "actions": [{"action_type": "lead", "value": "2"}],
+            "actions": [
+                {"action_type": "lead", "value": "2"},
+                {"action_type": "video_view", "value": "120"},
+            ],
         }]
 
 
@@ -179,7 +182,10 @@ def test_metrics_payload_maps_daily_values_for_upsert() -> None:
             "clicks": "30",
             "inline_link_clicks": "20",
             "ctr": "3.0",
-            "actions": [{"action_type": "lead", "value": "2"}],
+            "actions": [
+                {"action_type": "lead", "value": "2"},
+                {"action_type": "video_view", "value": "120"},
+            ],
             "cost_per_action_type": [{"action_type": "lead", "value": "12.75"}],
         },
         "campaign_id",
@@ -190,6 +196,7 @@ def test_metrics_payload_maps_daily_values_for_upsert() -> None:
     assert payload["campaign_id"] == "internal-id"
     assert Decimal(payload["spend"]) == Decimal("25.50")
     assert payload["leads"] == 2
+    assert payload["video_views_3s"] == 120
     assert payload["cpl"] == "12.75"
 
 

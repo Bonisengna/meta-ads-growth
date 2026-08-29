@@ -101,7 +101,7 @@ GET /api/v1/ads?adset_id={adset_id}
 
 Sem o parâmetro `status`, tanto `ACTIVE` quanto `ARCHIVED` são retornados.
 
-O dashboard aceita janelas prontas de 7, 14, 30, 90, 120 ou 180 dias:
+O dashboard aceita janelas prontas de 7, 14, 30, 90, 120, 180 ou 360 dias:
 
 ```http
 GET /api/v1/dashboard?days=30
@@ -160,14 +160,14 @@ Para coletar uma faixa histórica, a partir de `backend/`:
 ```
 
 Para preparar a visão histórica completa de uma conta já cadastrada, execute uma
-carga inicial de 180 dias. A operação usa UPSERT e pode ser repetida sem duplicar
+carga inicial de até 360 dias. A operação usa UPSERT e pode ser repetida sem duplicar
 as métricas:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\sync_meta_all.py --lookback-days 180
+.\.venv\Scripts\python.exe scripts\sync_meta_all.py --lookback-days 360
 ```
 
-A rotina diária continua usando `META_SYNC_LOOKBACK_DAYS=3`; não configure 180
+A rotina diária continua usando `META_SYNC_LOOKBACK_DAYS=3`; não configure 360
 como padrão do worker.
 
 O comando continua aceitando `--date AAAA-MM-DD` para apenas um dia. A coleta

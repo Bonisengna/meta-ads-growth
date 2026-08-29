@@ -67,9 +67,14 @@ class MetaSyncService:
         adset_ids, adset_changes = self._sync_adsets(campaign_ids, adsets)
         ads = self.meta.list_ads(normalized_id)
         ad_changes = self._sync_ads(adset_ids, ads)
+        synced_at = now_iso()
         (
             self.supabase.table("meta_accounts")
-            .update({"last_synced_at": now_iso(), "updated_at": now_iso()})
+            .update({
+                "last_synced_at": synced_at,
+                "last_entities_synced_at": synced_at,
+                "updated_at": synced_at,
+            })
             .eq("id", account["id"])
             .execute()
         )
@@ -114,6 +119,19 @@ class MetaSyncService:
                 )
             counts[level] = len(payloads)
         return counts
+
+    def mark_metrics_synced(self, account_id: str, *, complete: bool) -> None:
+        """Registra separadamente o núcleo de métricas e a coleta integral."""
+        synced_at = now_iso()
+        values = {"last_metrics_synced_at": synced_at, "updated_at": synced_at}
+        if complete:
+            values["last_successful_sync_at"] = synced_at
+        (
+            self.supabase.table("meta_accounts")
+            .update(values)
+            .eq("meta_account_id", account_id.removeprefix("act_"))
+            .execute()
+        )
 
     def sync_breakdown_metrics(
         self, account_id: str, since: date, until: date | None = None
@@ -397,7 +415,9 @@ def metrics_payload(
             "onsite_conversion.messaging_conversation_started_7d"
         ),
         "landing_page_views": int(float(actions.get("landing_page_view", 0))),
-        "video_views_3s": action_total(row.get("video_3_sec_watched_actions")),
+        # A Graph API expõe a visualização curta como action_type=video_view;
+        # `video_3_sec_watched_actions` não é um campo válido no Ads Insights.
+        "video_views_3s": int(float(actions.get("video_view", 0))),
         "video_plays": action_total(row.get("video_play_actions")),
         "video_p25": action_total(row.get("video_p25_watched_actions")),
         "video_p50": action_total(row.get("video_p50_watched_actions")),

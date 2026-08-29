@@ -11,6 +11,7 @@ from app.models.entities import EntityStatus
 CLIENT_COLUMNS = "id,name,slug,status,created_at,updated_at"
 META_ACCOUNT_COLUMNS = (
     "id,client_id,meta_account_id,name,currency,timezone,status,last_synced_at,"
+    "last_entities_synced_at,last_metrics_synced_at,last_successful_sync_at,"
     "created_at,updated_at"
 )
 CAMPAIGN_COLUMNS = (
@@ -515,7 +516,8 @@ class DashboardService:
         client_ids = row_ids(client_rows)
 
         account_query = self.client.table("meta_accounts").select(
-            "id,client_id,currency,timezone,last_synced_at"
+            "id,client_id,currency,timezone,last_synced_at,last_entities_synced_at,"
+            "last_metrics_synced_at,last_successful_sync_at"
         )
         if client_id:
             account_query = account_query.eq("client_id", str(client_id))

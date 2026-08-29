@@ -117,3 +117,12 @@ def test_cors_allows_secure_settings_post() -> None:
     )
     assert response.status_code == 200
     assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_cors_allows_client_update_patch() -> None:
+    response = TestClient(main_app).options(
+        "/api/v1/settings/clients/client-id",
+        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "PATCH"},
+    )
+    assert response.status_code == 200
+    assert "PATCH" in response.headers["access-control-allow-methods"]

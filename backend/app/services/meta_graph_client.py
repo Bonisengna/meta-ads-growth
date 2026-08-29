@@ -111,7 +111,7 @@ class MetaGraphClient:
                 fields=(
                     f"{level}_id,date_start,spend,impressions,reach,clicks,inline_link_clicks,"
                     "ctr,cpc,cpm,frequency,actions,cost_per_action_type,"
-                    "video_play_actions,video_3_sec_watched_actions,"
+                    "video_play_actions,"
                     "video_p25_watched_actions,video_p50_watched_actions,"
                     "video_p75_watched_actions,video_p95_watched_actions,"
                     "video_thruplay_watched_actions"

@@ -15,6 +15,13 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function apiGetStatus<T>(path: string, token: string): Promise<{ ok: boolean; data: T }> {
+  const response = await fetch(`${apiUrl}${path}`, { headers: { Accept: "application/json", Authorization: `Bearer ${token}` }, cache: "no-store" });
+  if (response.status === 401) throw new Error("SESSION_EXPIRED");
+  const data = await response.json() as T;
+  return { ok: response.ok, data };
+}
+
 export async function apiPost<T>(path: string, token: string, body: unknown): Promise<T> {
   const response = await fetch(`${apiUrl}${path}`, {
     method: "POST",

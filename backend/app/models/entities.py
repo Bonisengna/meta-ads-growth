@@ -32,6 +32,9 @@ class MetaAccountRead(ApiModel):
     timezone: str | None = None
     status: EntityStatus
     last_synced_at: datetime | None = None
+    last_entities_synced_at: datetime | None = None
+    last_metrics_synced_at: datetime | None = None
+    last_successful_sync_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

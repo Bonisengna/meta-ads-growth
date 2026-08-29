@@ -44,6 +44,9 @@ def test_insights_serializes_time_range_and_level() -> None:
     assert captured[0].url.path.endswith("/act_123/insights")
     assert captured[0].url.params["level"] == "campaign"
     assert json.loads(captured[0].url.params["time_range"])["since"] == "2026-08-15"
+    fields = captured[0].url.params["fields"].split(",")
+    assert "actions" in fields
+    assert "video_3_sec_watched_actions" not in fields
 
 
 def test_breakdown_insights_send_one_supported_dimension() -> None:

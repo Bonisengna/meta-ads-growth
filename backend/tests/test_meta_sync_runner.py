@@ -119,6 +119,9 @@ class FakeSyncService:
             raise MetaGraphError("invalid breakdown", code=100, status_code=400)
         return {"age": 2, "gender": 2}
 
+    def mark_metrics_synced(self, account_id, *, complete):
+        self.calls.append(("mark_metrics", account_id, complete))
+
 
 def make_database() -> dict[str, list[dict]]:
     return {
@@ -149,28 +152,29 @@ def test_runner_syncs_only_active_accounts_and_reprocesses_today(monkeypatch) ->
         ("entities", "c1", "123"),
         ("metrics", "123", date(2026, 8, 14), date(2026, 8, 16)),
         ("breakdowns", "123", date(2026, 8, 14), date(2026, 8, 16)),
+        ("mark_metrics", "123", True),
     ]
     saved = database["sync_runs"][0]
     assert saved["status"] == "SUCCESS"
     assert saved["duration_ms"] == 0
 
 
-def test_runner_accepts_180_day_historical_backfill(monkeypatch) -> None:
+def test_runner_accepts_360_day_historical_backfill(monkeypatch) -> None:
     FakeSyncService.calls = []
     monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
     result = MetaSyncRunner(  # type: ignore[arg-type]
         FakeSupabase(make_database()), object(), now=lambda: NOW, sleep=lambda _delay: None
-    ).run(lookback_days=180)
+    ).run(lookback_days=360)
 
     assert result["status"] == "SUCCESS"
-    assert result["lookback_days"] == 180
-    assert ("metrics", "123", date(2026, 2, 18), date(2026, 8, 16)) in FakeSyncService.calls
+    assert result["lookback_days"] == 360
+    assert ("metrics", "123", date(2025, 8, 22), date(2026, 8, 16)) in FakeSyncService.calls
 
 
-def test_runner_rejects_more_than_180_days() -> None:
+def test_runner_rejects_more_than_360_days() -> None:
     runner = MetaSyncRunner(FakeSupabase(make_database()), object(), now=lambda: NOW)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="entre 1 e 180"):
-        runner.run(181)
+    with pytest.raises(ValueError, match="entre 1 e 360"):
+        runner.run(361)
 
 
 def test_runner_marks_partial_when_one_account_fails(monkeypatch) -> None:
@@ -200,9 +204,29 @@ def test_runner_reports_breakdown_failure_stage(monkeypatch) -> None:
         FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None
     ).run(3)
 
-    assert result["status"] == "FAILED"
-    assert result["accounts"][0]["error_stage"] == "breakdowns"
-    assert result["accounts"][0]["error_code"] == 100
+    assert result["status"] == "PARTIAL"
+    assert result["accounts_partial"] == 1
+    assert result["accounts_failed"] == 0
+    assert result["accounts"][0]["warning_stage"] == "breakdowns"
+    assert result["accounts"][0]["warning_code"] == 100
+    assert ("mark_metrics", "breakdown-failed", False) in FakeSyncService.calls
+
+
+def test_partial_metrics_run_resolves_old_token_alert(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    database = make_database()
+    database["meta_accounts"][0]["meta_account_id"] = "breakdown-failed"
+    database["integration_alerts"] = [{
+        "id": "alert-1", "scope_key": "GLOBAL", "alert_type": "TOKEN_EXPIRED",
+        "status": "OPEN",
+    }]
+
+    MetaSyncRunner(  # type: ignore[arg-type]
+        FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None
+    ).run(3)
+
+    assert database["integration_alerts"][0]["status"] == "RESOLVED"
 
 
 def test_running_lock_prevents_concurrent_sync() -> None:

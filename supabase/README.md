@@ -32,7 +32,9 @@ supabase/
     ├── 0007_sync_runs.sql
     ├── 0008_integration_alerts.sql
     ├── 0009_integration_alerts_account_index.sql
-    └── 0010_user_client_access_rls.sql
+    ├── 0010_user_client_access_rls.sql
+    ├── ...
+    └── 0019_operational_reliability.sql
 ```
 
 ### 0001_app_health.sql
@@ -60,6 +62,14 @@ backend e unicidade para impedir alertas abertos duplicados.
 Cria o vínculo entre usuários do Supabase Auth e clientes do SaaS. Concede
 leitura a `authenticated` somente sob políticas RLS que percorrem a hierarquia
 cliente → conta → campanha → conjunto → anúncio → métricas.
+
+### 0019_operational_reliability.sql
+
+Amplia a carga histórica para 360 dias, registra contas parcialmente
+sincronizadas e separa os horários de atualização das entidades, métricas e
+execuções totalmente concluídas. O campo legado `last_synced_at` é preservado
+por compatibilidade, mas não deve ser usado para afirmar que as métricas estão
+atuais.
 
 ## Validação realizada no projeto real
 

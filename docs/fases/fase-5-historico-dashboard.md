@@ -20,7 +20,7 @@ reprocessar uma faixa com segurança, atualizando valores sem criar duplicatas.
 
 ## Períodos e comparação
 
-O dashboard oferece janelas de 7, 14, 30, 90, 120 e 180 dias, além de datas
+O dashboard oferece janelas de 7, 14, 30, 90, 120, 180 e 360 dias, além de datas
 personalizadas. Uma janela de 30 dias é comparada aos 30 dias imediatamente
 anteriores. A resposta contém `period`, `previous_period`, `metrics`,
 `previous_metrics` e `change_percent`.

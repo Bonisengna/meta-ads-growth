@@ -22,8 +22,21 @@ class MetaHealthService:
             self.client.table("sync_runs")
             .select(
                 "id,status,started_at,finished_at,duration_ms,accounts_total,"
-                "accounts_success,accounts_failed"
+                "accounts_success,accounts_partial,accounts_failed"
             )
+            .order("started_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        successful_rows = (
+            self.client.table("sync_runs")
+            .select(
+                "id,status,started_at,finished_at,duration_ms,accounts_total,"
+                "accounts_success,accounts_partial,accounts_failed"
+            )
+            .eq("status", "SUCCESS")
             .order("started_at", desc=True)
             .limit(1)
             .execute()
@@ -32,7 +45,10 @@ class MetaHealthService:
         )
         accounts = (
             self.client.table("meta_accounts")
-            .select("id,meta_account_id,name,last_synced_at")
+            .select(
+                "id,meta_account_id,name,last_synced_at,last_entities_synced_at,"
+                "last_metrics_synced_at,last_successful_sync_at"
+            )
             .eq("status", "ACTIVE")
             .order("name")
             .execute()
@@ -54,10 +70,13 @@ class MetaHealthService:
                 "id": row["id"],
                 "meta_account_id": row["meta_account_id"],
                 "name": row["name"],
-                "last_synced_at": row.get("last_synced_at"),
+                "last_entities_synced_at": row.get("last_entities_synced_at"),
+                "last_metrics_synced_at": row.get("last_metrics_synced_at"),
+                "last_successful_sync_at": row.get("last_successful_sync_at"),
             }
             for row in accounts
-            if not row.get("last_synced_at") or parse_datetime(row["last_synced_at"]) < cutoff
+            if not row.get("last_metrics_synced_at")
+            or parse_datetime(row["last_metrics_synced_at"]) < cutoff
         ]
         latest = latest_rows[0] if latest_rows else None
         token_expired = any(row["alert_type"] == "TOKEN_EXPIRED" for row in alerts)
@@ -73,6 +92,7 @@ class MetaHealthService:
             "checked_at": self.now().isoformat(),
             "stale_after_hours": self.stale_hours,
             "latest_run": latest,
+            "latest_successful_run": successful_rows[0] if successful_rows else None,
             "active_accounts": len(accounts),
             "stale_accounts": stale_accounts,
             "open_alerts": alerts,
