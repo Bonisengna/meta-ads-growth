@@ -17,16 +17,16 @@ app = FastAPI(
 )
 
 app.add_middleware(
+    RateLimitMiddleware,
+    requests=settings.rate_limit_requests,
+    window_seconds=settings.rate_limit_window_seconds,
+)
+app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
-)
-app.add_middleware(
-    RateLimitMiddleware,
-    requests=settings.rate_limit_requests,
-    window_seconds=settings.rate_limit_window_seconds,
 )
 
 # Health disponível na raiz e também sob o prefixo versionado da API.

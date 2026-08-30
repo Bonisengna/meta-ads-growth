@@ -2,8 +2,8 @@
 
 import type { Session } from "@supabase/supabase-js";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiGet, apiGetStatus, apiPatch, apiPost, query } from "@/lib/api";
+import { FormEvent, Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiGet, apiGetStatus, apiPatch, apiPost, isSessionExpired, query } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { AdOperation, BreakdownPoint, Campaign, CampaignOperation, Client, Dashboard, EntityPerformance, Improvement, ManagedClient, MetaAccount, MetaHealth, Metrics, Page, Recommendation, SettingsData } from "@/lib/types";
 
@@ -136,14 +136,70 @@ function trendCopy(meaning: TrendMeaning) {
   return "sem alteração";
 }
 
-function MetricCard({ label, metricKey, metrics, change }: { label: string; metricKey: keyof Metrics; metrics: Metrics; change?: number | null }) {
+type DashboardIconName = "wallet" | "target" | "cursor" | "chart" | "people" | "conversion" | "filter";
+
+function DashboardIcon({ name }: { name: DashboardIconName }) {
+  const paths: Record<DashboardIconName, ReactNode> = {
+    wallet: <><path d="M3 7.5h18v11H3z" /><path d="M6 7.5V5h12v2.5M16 13h3" /></>,
+    target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="m15 9 5-5m-4 0h4v4" /></>,
+    cursor: <path d="m6 3 12 9-6 1.5L9 19z" />,
+    chart: <><path d="M4 19V9m6 10V5m6 14v-7m4 7H2" /></>,
+    people: <><circle cx="9" cy="8" r="3" /><path d="M3 19c.6-4 2.6-6 6-6s5.4 2 6 6" /><path d="M16 7a2.5 2.5 0 0 1 0 5m1 2c2 .6 3.2 2.2 3.5 5" /></>,
+    conversion: <><path d="M5 12h13m-4-4 4 4-4 4" /><path d="M5 5v14" /></>,
+    filter: <path d="M3 5h18l-7 8v5l-4 2v-7z" />,
+  };
+  return <svg className="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+}
+
+function MetricCard({ label, metricKey, metrics, change, icon }: { label: string; metricKey: keyof Metrics; metrics: Metrics; change?: number | null; icon?: DashboardIconName }) {
   const [showGuide, setShowGuide] = useState(false);
   const meaning = trendMeaning(metricKey, change);
   const changeCopy = change == null
     ? "sem base anterior"
     : `${change > 0 ? "+" : ""}${decimal.format(change)}% vs. anterior · ${trendCopy(meaning)}`;
   const guide = metricGuides[metricKey];
-  return <><article className={`metric-card${guide ? " explainable" : ""}`} onClick={() => guide && setShowGuide(true)}><span>{label}</span>{guide && <button className="info-button" aria-label={`Entenda ${label}`} onClick={(event) => { event.stopPropagation(); setShowGuide(true); }}>i</button>}<strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={meaning}>{changeCopy}</small>{guide && <em>Toque para entender</em>}</article>{showGuide && guide && <IndicatorInfo guide={guide} onClose={() => setShowGuide(false)} />}</>;
+  return <><article className={`metric-card${guide ? " explainable" : ""}`} onClick={() => guide && setShowGuide(true)}>{icon && <span className="metric-icon"><DashboardIcon name={icon} /></span>}<span>{label}</span>{guide && <button className="info-button" aria-label={`Entenda ${label}`} onClick={(event) => { event.stopPropagation(); setShowGuide(true); }}>i</button>}<strong>{metricValue(metricKey, metrics[metricKey])}</strong><small className={meaning}>{changeCopy}</small>{guide && <em>Toque para entender</em>}</article>{showGuide && guide && <IndicatorInfo guide={guide} onClose={() => setShowGuide(false)} />}</>;
+}
+
+function RoasCard() {
+  return <article className="metric-card dashboard-kpi unavailable"><span className="metric-icon"><DashboardIcon name="chart" /></span><span>ROAS</span><strong>—</strong><small className="contextual">Receita ainda não integrada</small><em>Disponível quando houver receita atribuída</em></article>;
+}
+
+function PerformanceAreaChart({ points }: { points: Dashboard["daily_series"] }) {
+  const bucketSize = Math.max(1, Math.ceil(points.length / 60));
+  const compact = Array.from({ length: Math.ceil(points.length / bucketSize) }, (_, bucket) => {
+    const slice = points.slice(bucket * bucketSize, (bucket + 1) * bucketSize);
+    return { metric_date: slice.at(-1)?.metric_date ?? "", spend: slice.reduce((total, point) => total + point.spend, 0), results: slice.reduce((total, point) => total + point.leads + point.conversations, 0) };
+  });
+  if (!compact.some((point) => point.spend > 0 || point.results > 0)) return <div className="chart-empty dashboard-chart-empty"><strong>Sem entrega no período</strong><span>A evolução aparecerá assim que houver investimento ou resultado.</span></div>;
+  const width = 760, height = 250, pad = 30;
+  const spendMax = Math.max(...compact.map((point) => point.spend), 1);
+  const resultMax = Math.max(...compact.map((point) => point.results), 1);
+  const x = (index: number) => pad + (index / Math.max(compact.length - 1, 1)) * (width - pad * 2);
+  const y = (value: number, maximum: number) => height - pad - (value / maximum) * (height - pad * 2);
+  const spendLine = compact.map((point, index) => `${index ? "L" : "M"}${x(index)},${y(point.spend, spendMax)}`).join(" ");
+  const resultLine = compact.map((point, index) => `${index ? "L" : "M"}${x(index)},${y(point.results, resultMax)}`).join(" ");
+  const area = `${spendLine} L${x(compact.length - 1)},${height - pad} L${x(0)},${height - pad} Z`;
+  const labels = [compact[0], compact[Math.floor((compact.length - 1) / 2)], compact.at(-1)].filter(Boolean) as typeof compact;
+  return <figure className="performance-chart"><div className="chart-legend"><span className="spend">Investimento</span><span className="results">Resultados</span></div><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Evolução do investimento e dos resultados no período"><defs><linearGradient id="meta-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0866ff" stopOpacity=".28" /><stop offset="1" stopColor="#0866ff" stopOpacity=".02" /></linearGradient></defs><path className="chart-grid-line" d={`M${pad} ${height - pad}H${width - pad} M${pad} ${height / 2}H${width - pad} M${pad} ${pad}H${width - pad}`} /><path className="chart-area" d={area} /><path className="chart-spend-line" d={spendLine} /><path className="chart-results-line" d={resultLine} /></svg><div className="chart-axis">{labels.map((point) => <span key={point.metric_date}>{friendlyDate(point.metric_date)}</span>)}</div><figcaption>As séries usam escalas próprias para evidenciar a evolução; os valores exatos permanecem nos indicadores e tabelas.</figcaption></figure>;
+}
+
+function InvestmentDonut({ items }: { items: Dashboard["campaign_ranking"] }) {
+  const ranked = items.filter((item) => item.spend > 0).slice(0, 5);
+  const total = ranked.reduce((sum, item) => sum + item.spend, 0);
+  const colors = ["#0866ff", "#7b2ff7", "#42a5f5", "#8c73ff", "#b9c8ff"];
+  if (!total) return <div className="chart-empty dashboard-chart-empty"><strong>Sem distribuição disponível</strong><span>Campanhas com investimento aparecerão aqui.</span></div>;
+  const stops = ranked.map((item, index) => {
+    const start = ranked.slice(0, index).reduce((sum, current) => sum + (current.spend / total) * 100, 0);
+    const end = start + (item.spend / total) * 100;
+    return `${colors[index]} ${start}% ${end}%`;
+  }).join(", ");
+  return <figure className="investment-donut"><div className="donut-visual" role="img" aria-label={`Distribuição de ${currency.format(total)} entre ${ranked.length} campanhas`} style={{ background: `conic-gradient(${stops})` }}><div><strong>{currency.format(total)}</strong><span>investidos</span></div></div><figcaption><ol>{ranked.map((item, index) => <li key={item.campaign_id}><i style={{ background: colors[index] }} /><span title={item.name}>{item.name}</span><strong>{decimal.format((item.spend / total) * 100)}%</strong></li>)}</ol></figcaption></figure>;
+}
+
+function DashboardCampaignList({ items }: { items: Dashboard["campaign_ranking"] }) {
+  const ranked = items.slice(0, 6);
+  return <section className="panel dashboard-campaign-list"><div className="panel-title"><div><p className="eyebrow">DETALHAMENTO</p><h2>Campanhas em destaque</h2></div><span>{items.length} com entrega</span></div><div className="table-wrap"><table><thead><tr><th>Campanha</th><th>Situação</th><th>Investimento</th><th>Resultados</th><th>CTR</th><th>Custo/conversa</th></tr></thead><tbody>{ranked.length ? ranked.map((item) => <tr key={item.campaign_id}><td><strong>{item.name}</strong></td><td><span className={`status ${item.status.toLowerCase()}`}>{item.status === "ACTIVE" ? "Ativa" : item.status === "PAUSED" ? "Pausada" : "Arquivada"}</span></td><td>{currency.format(item.spend)}</td><td>{integer.format(item.leads + item.conversations)}</td><td>{item.ctr == null ? "—" : `${decimal.format(item.ctr)}%`}</td><td>{item.cost_per_conversation == null ? "—" : currency.format(item.cost_per_conversation)}</td></tr>) : <tr><td colSpan={6} className="empty-cell">Nenhuma campanha com entrega no período.</td></tr>}</tbody></table></div></section>;
 }
 
 function executivePriorities(dashboard: Dashboard): ExecutivePriority[] {
@@ -309,7 +365,7 @@ function FieldHelp({ text }: { text: string }) {
   return <span className="field-help" tabIndex={0} aria-label={text}>?<span role="tooltip">{text}</span></span>;
 }
 
-function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsChanged }: { token: string; clients: Client[]; userEmail: string; onUpdatePassword: (password: string) => Promise<void>; onClientsChanged: (clients: Client[]) => void }) {
+function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsChanged, onSessionExpired }: { token: string; clients: Client[]; userEmail: string; onUpdatePassword: (password: string) => Promise<void>; onClientsChanged: (clients: Client[]) => void; onSessionExpired: () => Promise<void> }) {
   const [data, setData] = useState<SettingsData | null>(null);
   const [section, setSection] = useState<SettingsSection>("meta");
   const [message, setMessage] = useState("");
@@ -321,11 +377,15 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
   const [managedClients, setManagedClients] = useState<ManagedClient[]>([]);
   const [clientForm, setClientForm] = useState<ClientForm>(emptyClientForm);
 
+  const showFailure = useCallback((cause: unknown, fallback: string) => {
+    if (isSessionExpired(cause)) { void onSessionExpired(); return; }
+    setMessage(cause instanceof Error ? cause.message : fallback);
+  }, [onSessionExpired]);
   const refresh = useCallback(async () => setData(await apiGet<SettingsData>("/api/v1/settings", token)), [token]);
   useEffect(() => {
-    const timeout = window.setTimeout(() => void refresh(), 0);
+    const timeout = window.setTimeout(() => void refresh().catch((cause) => showFailure(cause, "Não foi possível carregar os ajustes.")), 0);
     return () => window.clearTimeout(timeout);
-  }, [refresh]);
+  }, [refresh, showFailure]);
   const refreshClients = useCallback(async () => {
     const rows = await apiGet<ManagedClient[]>("/api/v1/settings/clients", token);
     setManagedClients(rows);
@@ -337,16 +397,16 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
     });
   }, [onClientsChanged, token]);
   useEffect(() => {
-    const timeout = window.setTimeout(() => void refreshClients().catch((cause) => setMessage(cause instanceof Error ? cause.message : "Não foi possível carregar os clientes.")), 0);
+    const timeout = window.setTimeout(() => void refreshClients().catch((cause) => showFailure(cause, "Não foi possível carregar os clientes.")), 0);
     return () => window.clearTimeout(timeout);
-  }, [refreshClients]);
+  }, [refreshClients, showFailure]);
 
   async function saveMeta(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
     try {
       await apiPost("/api/v1/settings/meta", token, { ...meta, business_id: meta.business_id || null });
       setMeta((value) => ({ ...value, access_token: "" })); setMessage("Tudo certo! A conexão com a Meta foi verificada e salva com segurança."); await refresh();
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar."); }
+    } catch (cause) { showFailure(cause, "Não foi possível salvar."); }
     finally { setBusy(false); }
   }
 
@@ -359,7 +419,7 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
         openai_api_key: system.openai_api_key || null,
       });
       setSystem((value) => ({ ...value, meta_app_secret: "", openai_api_key: "" })); setMessage("Configuração atualizada e protegida com segurança."); await refresh();
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar."); }
+    } catch (cause) { showFailure(cause, "Não foi possível salvar."); }
     finally { setBusy(false); }
   }
 
@@ -390,7 +450,7 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       setManagedClients(next); onClientsChanged(next); setClientForm(formFromClient(saved));
       setMessage(clientForm.id ? "Cadastro do cliente atualizado." : "Cliente cadastrado e vinculado ao seu acesso.");
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível salvar o cliente."); }
+    } catch (cause) { showFailure(cause, "Não foi possível salvar o cliente."); }
     finally { setBusy(false); }
   }
 
@@ -506,7 +566,14 @@ export default function Home() {
   }, [filters, pathname, router]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
+    supabase.auth.getSession().then(async ({ data, error: sessionError }) => {
+      if (sessionError) {
+        await supabase.auth.signOut({ scope: "local" });
+        setSession(null);
+        setAuthError("Sua sessão local não é mais válida. Entre novamente.");
+      } else setSession(data.session);
+      setAuthReady(true);
+    });
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
       if (event === "PASSWORD_RECOVERY") {
@@ -517,6 +584,11 @@ export default function Home() {
       }
     });
     return () => data.subscription.unsubscribe();
+  }, [supabase]);
+
+  const expireSession = useCallback(async () => {
+    await supabase.auth.signOut({ scope: "local" });
+    setAuthError("Sua sessão expirou. Entre novamente.");
   }, [supabase]);
 
   const loadData = useCallback(async () => {
@@ -535,10 +607,10 @@ export default function Home() {
       setClients(clientPage.items); setAccounts(accountPage.items); setCampaigns(campaignPage.items); setDashboard(dashboardData); setImprovements(improvementPage.items);
       setMetaHealth(healthResult?.data ?? null);
     } catch (cause) {
-      if (cause instanceof Error && cause.message === "SESSION_EXPIRED") { await supabase.auth.signOut(); setAuthError("Sua sessão expirou. Entre novamente."); }
+      if (isSessionExpired(cause)) await expireSession();
       else setError(cause instanceof Error ? cause.message : "Não foi possível carregar o dashboard.");
     } finally { setLoading(false); }
-  }, [filters, session, supabase]);
+  }, [expireSession, filters, session]);
 
   useEffect(() => {
     if (!session) {
@@ -612,7 +684,10 @@ export default function Home() {
       });
       setDecisions((current) => ({ ...current, [item.key]: status }));
       if (status === "ACCEPTED") await loadData();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível registrar a decisão."); }
+    } catch (cause) {
+      if (isSessionExpired(cause)) await expireSession();
+      else setError(cause instanceof Error ? cause.message : "Não foi possível registrar a decisão.");
+    }
   }
 
   function navigate(next: MainView) {
@@ -647,24 +722,31 @@ export default function Home() {
     : view === "analyses"
       ? { eyebrow: "DIAGNÓSTICO DO FUNIL", title: "Análises", subtitle: "Descubra em qual etapa a campanha está perdendo eficiência." }
       : { eyebrow: "PAINEL DE PERFORMANCE", title: "Visão geral", subtitle: "O que aconteceu, o que mudou e onde olhar primeiro." };
+  const userName = String(session?.user.user_metadata?.full_name ?? session?.user.user_metadata?.name ?? session?.user.email?.split("@")[0] ?? "gestor").split(" ")[0];
+  const selectedClientName = clients.find((item) => item.id === filters.clientId)?.name ?? "Todos os clientes";
+  const selectedAccountName = accounts.find((item) => item.id === filters.accountId)?.name ?? "Todas as contas";
+  const selectedCampaignName = campaigns.find((item) => item.id === filters.campaignId)?.name ?? "Todas as campanhas";
 
   if (!isSupabaseConfigured) return <main className="center-screen"><div className="brand-mark">D</div><h2>Frontend ainda não configurado</h2><p>Crie o arquivo <code>.env.local</code> conforme o README.</p></main>;
   if (!authReady) return <main className="center-screen"><div className="spinner" /><p>Preparando seu painel…</p></main>;
   if (authScreen === "update-password") return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Proteja seu acesso com uma nova senha.</h1><p>O link de recuperação abre uma sessão temporária e segura somente para atualizar sua credencial.</p><div className="trust-line"><i /> Sua senha não é armazenada pelo DescompliADS</div></section><section className="login-panel"><form onSubmit={finishPasswordRecovery}><div><p className="eyebrow coral">RECUPERAÇÃO DE ACESSO</p><h2>Crie uma nova senha</h2><p>Use pelo menos 8 caracteres.</p></div><label>Nova senha<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Mínimo de 8 caracteres" /></label><label>Confirme a nova senha<input type="password" value={newPasswordConfirmation} onChange={(event) => setNewPasswordConfirmation(event.target.value)} minLength={8} required autoComplete="new-password" placeholder="Digite novamente" /></label>{authMessage && <p className="form-success">{authMessage}</p>}{authError && <p className="form-error">{authError}</p>}<button type="submit" disabled={authBusy}>{authBusy ? "Atualizando…" : "Salvar nova senha"}</button><button type="button" className="auth-link" onClick={() => { setAuthScreen("forgot-password"); setAuthError(""); setAuthMessage(""); }}>Solicitar outro link</button></form></section></main>;
   if (!session) return <main className="login-shell"><section className="login-story"><div className="brand-mark">D</div><p className="eyebrow">DESCOMPLIADS</p><h1>Decisões melhores começam com números claros.</h1><p>Campanhas, comparações e sinais de desempenho em um só lugar — sem alterar nada na Meta.</p></section><section className="login-panel">{authScreen === "forgot-password" ? <form onSubmit={requestPasswordReset}><div><p className="eyebrow coral">RECUPERAR ACESSO</p><h2>Esqueceu sua senha?</h2><p>Informe seu e-mail e enviaremos um link seguro para criar uma nova senha.</p></div><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label>{authMessage && <p className="form-success">{authMessage}</p>}{authError && <p className="form-error">{authError}</p>}<button type="submit" disabled={authBusy}>{authBusy ? "Enviando…" : "Enviar link de recuperação"}</button><button type="button" className="auth-link" onClick={() => { setAuthScreen("sign-in"); setAuthError(""); setAuthMessage(""); }}>← Voltar para entrar</button></form> : <form onSubmit={signIn}><div><p className="eyebrow coral">ACESSO SEGURO</p><h2>Bem-vindo de volta</h2><p>Escolha como deseja entrar.</p></div><button type="button" className="google-login" onClick={() => void signInWithGoogle()} disabled={authBusy}><span className="google-mark" aria-hidden="true">G</span>{authBusy ? "Aguarde…" : "Continuar com Google"}</button><div className="auth-divider"><span>ou entre com e-mail</span></div><label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@empresa.com" /></label><label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" /></label><button type="button" className="auth-link forgot-link" onClick={() => { setAuthScreen("forgot-password"); setAuthError(""); setAuthMessage(""); }}>Esqueci minha senha</button>{authMessage && <p className="form-success">{authMessage}</p>}{authError && <p className="form-error">{authError}</p>}<button type="submit" disabled={authBusy}>{authBusy ? "Entrando…" : <>Entrar no painel <span>→</span></>}</button></form>}</section></main>;
 
-  return <main className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+  return <main className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${view === "dashboard" ? " dashboard-shell" : ""}`}>
     <aside className="app-sidebar"><button type="button" className="sidebar-toggle" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}><span aria-hidden="true">{sidebarCollapsed ? "›" : "‹"}</span></button><div className="logo"><div className="brand-mark small">D</div><div className="logo-copy"><strong>DescompliADS</strong><small>Growth Intelligence</small></div></div><nav aria-label="Navegação principal"><button className={view === "dashboard" ? "active" : ""} aria-current={view === "dashboard" ? "page" : undefined} aria-label="Visão geral" title={sidebarCollapsed ? "Visão geral" : undefined} onClick={() => navigate("dashboard")}><span className="nav-icon" aria-hidden="true">◫</span><span className="nav-label">Visão geral</span></button><button className={view === "campaigns" ? "active" : ""} aria-current={view === "campaigns" ? "page" : undefined} aria-label="Campanhas" title={sidebarCollapsed ? "Campanhas" : undefined} onClick={() => navigate("campaigns")}><span className="nav-icon" aria-hidden="true">◎</span><span className="nav-label">Campanhas</span></button><button className={view === "analyses" ? "active" : ""} aria-current={view === "analyses" ? "page" : undefined} aria-label="Análises" title={sidebarCollapsed ? "Análises" : undefined} onClick={() => navigate("analyses")}><span className="nav-icon" aria-hidden="true">◇</span><span className="nav-label">Análises</span></button><button className={view === "settings" ? "active" : ""} aria-current={view === "settings" ? "page" : undefined} aria-label="Ajustes" title={sidebarCollapsed ? "Ajustes" : undefined} onClick={() => navigate("settings")}><span className="nav-icon" aria-hidden="true">⚙</span><span className="nav-label">Ajustes</span></button></nav><div className="sidebar-foot"><span className={`status-dot ${systemStatus.tone}`} title={systemStatus.label} /><span className="sidebar-status-copy">{systemStatus.label}</span><button onClick={() => supabase.auth.signOut()} aria-label="Sair" title={sidebarCollapsed ? "Sair" : undefined}><span className="logout-icon" aria-hidden="true">↪</span><span className="logout-label">Sair</span></button></div></aside>
-    {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} onUpdatePassword={updateAuthenticatedPassword} onClientsChanged={setClients} /></section> : <section className="workspace" id="dashboard-top"><header><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{pageCopy.title}</h1><p>{pageCopy.subtitle}</p></div></header>
-      <section className="filters"><div className="filter-heading"><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div><label>Período<select value={filters.days} onChange={(e) => updateFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => updateFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => updateFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => updateFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
+    {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} onUpdatePassword={updateAuthenticatedPassword} onClientsChanged={setClients} onSessionExpired={expireSession} /></section> : <section className={`workspace${view === "dashboard" ? " dashboard-workspace" : ""}`} id="dashboard-top"><header className={view === "dashboard" ? "dashboard-header" : ""}><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{view === "dashboard" ? <>Olá, <span>{userName}</span></> : pageCopy.title}</h1><p>{pageCopy.subtitle}</p>{view === "dashboard" && <div className="context-summary" aria-label="Contexto selecionado"><span>{selectedClientName}</span><i aria-hidden="true">›</i><span>{selectedAccountName}</span><i aria-hidden="true">›</i><span>{selectedCampaignName}</span></div>}</div></header>
+      <section className="filters"><div className="filter-heading"><span className="filter-icon"><DashboardIcon name="filter" /></span><div><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div></div><label>Período<select value={filters.days} onChange={(e) => updateFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => updateFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => updateFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => updateFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => void loadData()}>Tentar novamente</button></div>}
       {metaHealth && metaHealth.status !== "HEALTHY" && <div className={`sync-health-banner ${metaHealth.status.toLowerCase()}`}><strong>{systemStatus.label}</strong><span>{metaHealth.status === "DEGRADED" ? "As métricas principais foram coletadas, mas algum detalhamento ainda precisa ser atualizado." : metaHealth.status === "UNCONFIGURED" ? "Configure a integração com a Meta antes de iniciar as coletas." : "A última coleta não foi concluída. Os dados exibidos podem estar desatualizados."}</span></div>}
       {loading && !dashboard && <section className="dashboard-loading" aria-label="Carregando painel"><div /><div /><div /><div /></section>}
       {!loading && !dashboard && !error && <div className="empty-state dashboard-empty"><strong>O painel ainda não possui informações.</strong><span>Verifique a conexão Meta em Ajustes ou atualize os resultados.</span><button onClick={() => navigate("settings")}>Abrir Ajustes</button></div>}
       {dashboard && <>{dashboard.metrics.spend === 0 && <div className="guidance-banner"><div><strong>Nenhum investimento encontrado neste período.</strong><span>{metaHealth && metaHealth.status !== "HEALTHY" ? "A coleta precisa ser concluída antes de confirmar que não houve entrega." : "Escolha um período em que as campanhas estiveram ativas ou mantenha esta visão para acompanhar a próxima coleta."}</span></div><button onClick={() => updateFilters({ ...filters, days: 360 })}>Ver 360 dias</button></div>}<section className="period-line"><span>{friendlyDate(dashboard.period.date_from)} → {friendlyDate(dashboard.period.date_to)}</span><small>comparado a {friendlyDate(dashboard.previous_period.date_from)} → {friendlyDate(dashboard.previous_period.date_to)}</small></section>
-        {view === "dashboard" && <><InvestmentPacingPanel dashboard={dashboard} /><ExecutiveSummary dashboard={dashboard} onOpenAnalyses={() => navigate("analyses")} /><section className="metrics-grid"><MetricCard label="Investimento" metricKey="spend" metrics={dashboard.metrics} change={dashboard.change_percent.spend} /><MetricCard label="Conversas" metricKey="conversations" metrics={dashboard.metrics} change={dashboard.change_percent.conversations} /><MetricCard label="Leads" metricKey="leads" metrics={dashboard.metrics} change={dashboard.change_percent.leads} /><MetricCard label="CPL" metricKey="cpl" metrics={dashboard.metrics} change={dashboard.change_percent.cpl} /><MetricCard label="CTR de link" metricKey="link_ctr" metrics={dashboard.metrics} change={dashboard.change_percent.link_ctr} /><MetricCard label="CPM" metricKey="cpm" metrics={dashboard.metrics} change={dashboard.change_percent.cpm} /></section>
-          <section className="content-grid"><article className="panel"><div className="panel-title"><div><p className="eyebrow">EVOLUÇÃO DIÁRIA</p><h2>Investimento por dia</h2></div><span className="pill">{dashboard.daily_series.length} dias</span></div><div className="bars">{dashboard.daily_series.map((point) => { const maximum = Math.max(...dashboard.daily_series.map((item) => item.spend), 1); return <div className="bar-column" key={point.metric_date} title={`${point.metric_date}: ${currency.format(point.spend)}`}><div style={{ height: `${Math.max((point.spend / maximum) * 100, point.spend ? 4 : 0)}%` }} /><small>{point.metric_date.slice(5)}</small></div>; })}</div></article><article className="panel insights-panel"><p className="eyebrow">DIAGNÓSTICO POR REGRAS</p><h2>Sinais do período</h2><div className="insight-list">{dashboard.insights.map((insight) => <div className={`insight ${insight.severity.toLowerCase()}`} key={insight.code}><strong>{insight.title}</strong><p>{insight.message}</p></div>)}</div><small>Nenhuma ação é executada automaticamente.</small></article></section>
-          <section className="content-grid"><article className="panel structure-panel"><div className="panel-title"><div><p className="eyebrow">ESTRUTURA IMPORTADA</p><h2>Conta em números</h2></div><span className="pill">Somente leitura</span></div><div className="structure-flow">{[[dashboard.clients,"Clientes"],[dashboard.meta_accounts,"Contas"],[dashboard.campaigns,"Campanhas"],[dashboard.adsets,"Conjuntos"],[dashboard.ads,"Anúncios"]].map(([value,label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></article><article className="panel signal-panel"><p className="eyebrow">LEITURA RÁPIDA</p><h2>Sinal do período</h2><div className="signal"><span>{dashboard.metrics.conversations > 0 ? "↗" : "—"}</span><div><strong>{dashboard.metrics.conversations > 0 ? `${dashboard.metrics.conversations} conversas registradas` : "Sem conversões no período"}</strong><p>{dashboard.metrics.conversations > 0 ? `Custo médio de ${currency.format(dashboard.metrics.spend / dashboard.metrics.conversations)} por conversa.` : "Amplie o período ou revise a coleta antes de concluir."}</p></div></div><small>Interpretação determinística. IA entra na próxima entrega.</small></article></section>
+        {view === "dashboard" && <><section className="metrics-grid dashboard-kpis"><MetricCard label="Investimento" metricKey="spend" metrics={dashboard.metrics} change={dashboard.change_percent.spend} icon="wallet" /><MetricCard label="CPL" metricKey="cpl" metrics={dashboard.metrics} change={dashboard.change_percent.cpl} icon="target" /><MetricCard label="CTR de link" metricKey="link_ctr" metrics={dashboard.metrics} change={dashboard.change_percent.link_ctr} icon="cursor" /><RoasCard /><MetricCard label="Alcance" metricKey="reach" metrics={dashboard.metrics} change={dashboard.change_percent.reach} icon="people" /><MetricCard label="Conversões" metricKey="conversations" metrics={dashboard.metrics} change={dashboard.change_percent.conversations} icon="conversion" /></section>
+          <section className="dashboard-chart-grid"><article className="panel performance-panel"><div className="panel-title"><div><p className="eyebrow">EVOLUÇÃO</p><h2>Investimento x resultados</h2></div><span className="pill">{dashboard.daily_series.length} dias</span></div><PerformanceAreaChart points={dashboard.daily_series} /></article><article className="panel distribution-panel"><div className="panel-title"><div><p className="eyebrow">DISTRIBUIÇÃO</p><h2>Investimento por campanha</h2></div></div><InvestmentDonut items={dashboard.campaign_ranking} /></article></section>
+          <DashboardCampaignList items={dashboard.campaign_ranking} />
+          <InvestmentPacingPanel dashboard={dashboard} /><ExecutiveSummary dashboard={dashboard} onOpenAnalyses={() => navigate("analyses")} />
+          <section className="content-grid"><article className="panel insights-panel"><p className="eyebrow">DIAGNÓSTICO POR REGRAS</p><h2>Sinais do período</h2><div className="insight-list">{dashboard.insights.map((insight) => <div className={`insight ${insight.severity.toLowerCase()}`} key={insight.code}><strong>{insight.title}</strong><p>{insight.message}</p></div>)}</div><small>Nenhuma ação é executada automaticamente.</small></article><article className="panel signal-panel"><p className="eyebrow">LEITURA RÁPIDA</p><h2>Sinal do período</h2><div className="signal"><span>{dashboard.metrics.conversations > 0 ? "↗" : "—"}</span><div><strong>{dashboard.metrics.conversations > 0 ? `${dashboard.metrics.conversations} conversas registradas` : "Sem conversões no período"}</strong><p>{dashboard.metrics.conversations > 0 ? `Custo médio de ${currency.format(dashboard.metrics.spend / dashboard.metrics.conversations)} por conversa.` : "Amplie o período ou revise a coleta antes de concluir."}</p></div></div><small>Interpretação determinística. Nenhuma ação automática.</small></article></section>
+          <section className="dashboard-structure"><article className="panel structure-panel"><div className="panel-title"><div><p className="eyebrow">ESTRUTURA IMPORTADA</p><h2>Conta em números</h2></div><span className="pill">Somente leitura</span></div><div className="structure-flow">{[[dashboard.clients,"Clientes"],[dashboard.meta_accounts,"Contas"],[dashboard.campaigns,"Campanhas"],[dashboard.adsets,"Conjuntos"],[dashboard.ads,"Anúncios"]].map(([value,label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></article></section>
           <section className="analytics-dashboard"><div className="analytics-heading"><div><p className="eyebrow coral">MAPA DE PERFORMANCE</p><h2>Quem converte, onde e quando</h2><p>Os gráficos usam recortes independentes da Meta e não alteram os totais do painel.</p></div><span className="pill">Atualização diária</span></div><div className="analytics-grid"><BreakdownChart title="Faixas etárias" subtitle="PÚBLICO · IDADE" points={dashboard.breakdowns?.age ?? []} /><BreakdownChart title="Gênero" subtitle="PÚBLICO · GÊNERO" points={dashboard.breakdowns?.gender ?? []} /><BreakdownChart title="Posicionamentos" subtitle="CANAIS · PLACEMENT" points={dashboard.breakdowns?.placement ?? []} /><BreakdownChart title="Plataformas" subtitle="CANAIS · FACEBOOK X INSTAGRAM" points={dashboard.breakdowns?.platform ?? []} /><BreakdownChart title="Dispositivos" subtitle="EXPERIÊNCIA · MOBILE X DESKTOP" points={dashboard.breakdowns?.device ?? []} /><BreakdownChart title="Regiões" subtitle="GEOGRAFIA · MELHORES RESULTADOS" points={dashboard.breakdowns?.region ?? []} /></div><TimeHeatmap points={dashboard.breakdowns?.hour ?? []} /></section></>}
         {view === "campaigns" && <><section className="metrics-grid campaign-metrics"><MetricCard label="Investimento" metricKey="spend" metrics={dashboard.metrics} change={dashboard.change_percent.spend} /><MetricCard label="Impressões" metricKey="impressions" metrics={dashboard.metrics} change={dashboard.change_percent.impressions} /><MetricCard label="Alcance" metricKey="reach" metrics={dashboard.metrics} change={dashboard.change_percent.reach} /><MetricCard label="Cliques no link" metricKey="link_clicks" metrics={dashboard.metrics} change={dashboard.change_percent.link_clicks} /><MetricCard label="Frequência" metricKey="frequency" metrics={dashboard.metrics} change={dashboard.change_percent.frequency} /><MetricCard label="CPM" metricKey="cpm" metrics={dashboard.metrics} change={dashboard.change_percent.cpm} /></section>
           <section className="panel table-panel"><div className="panel-title"><div><p className="eyebrow">RANKING</p><h2>Campanhas por investimento</h2></div><span>{dashboard.campaign_ranking.length} com entrega</span></div><div className="table-wrap"><table><thead><tr><th>Campanha</th><th>Investimento</th><th>Conversas</th><th>CTR</th><th>Custo/conversa</th></tr></thead><tbody>{dashboard.campaign_ranking.map((campaign) => <tr key={campaign.campaign_id}><td>{campaign.name}</td><td>{currency.format(campaign.spend)}</td><td>{integer.format(campaign.conversations)}</td><td>{campaign.ctr === null ? "—" : `${decimal.format(campaign.ctr)}%`}</td><td>{campaign.cost_per_conversation === null ? "—" : currency.format(campaign.cost_per_conversation)}</td></tr>)}</tbody></table></div></section>

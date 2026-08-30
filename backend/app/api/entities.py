@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from enum import IntEnum
 from uuid import UUID
@@ -34,6 +35,7 @@ from app.services.entity_services import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class DashboardDays(IntEnum):
@@ -54,6 +56,7 @@ def not_found(exc: EntityNotFoundError) -> HTTPException:
 
 
 def database_unavailable(exc: Exception) -> HTTPException:
+    logger.error("Supabase operation failed (%s)", type(exc).__name__)
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Não foi possível consultar o Supabase.",

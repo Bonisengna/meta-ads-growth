@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 import app.api.dependencies as dependencies
@@ -92,10 +93,43 @@ def test_rate_limit_returns_429() -> None:
     assert response.headers["Retry-After"] == "60"
 
 
+def test_rate_limit_error_keeps_cors_headers() -> None:
+    test_app = FastAPI()
+    test_app.add_middleware(RateLimitMiddleware, requests=1, window_seconds=60)
+    test_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000"],
+        allow_credentials=True,
+        allow_methods=["GET"],
+        allow_headers=["Authorization"],
+    )
+
+    @test_app.get("/private")
+    def private():
+        return {"ok": True}
+
+    test_client = TestClient(test_app)
+    headers = {"Origin": "http://localhost:3000"}
+    assert test_client.get("/private", headers=headers).status_code == 200
+    response = test_client.get("/private", headers=headers)
+
+    assert response.status_code == 429
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert response.headers["Retry-After"] == "60"
+
+
 def test_data_endpoint_requires_bearer_token() -> None:
     response = TestClient(main_app).get("/api/v1/clients")
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_unauthorized_response_keeps_cors_headers() -> None:
+    response = TestClient(main_app).get(
+        "/api/v1/clients", headers={"Origin": "http://localhost:3000"}
+    )
+    assert response.status_code == 401
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
 def test_cors_accepts_only_configured_local_origin() -> None:
