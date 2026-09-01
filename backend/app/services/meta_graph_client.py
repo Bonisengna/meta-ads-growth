@@ -119,6 +119,29 @@ class MetaGraphClient:
                 level=level,
                 time_increment="1",
                 time_range={"since": since, "until": until},
+                use_account_attribution_setting="true",
+                action_report_time="impression",
+            )
+        )
+
+    def list_period_insights(
+        self, account_id: str, since: str, until: str
+    ) -> list[dict[str, Any]]:
+        """Return account totals for reconciliation without summing unique reach."""
+        return list(
+            self._paginate(
+                f"/{account_node(account_id)}/insights",
+                fields=(
+                    "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,"
+                    "ctr,cpc,cpm,frequency,actions,cost_per_action_type,"
+                    "video_play_actions,video_p25_watched_actions,video_p50_watched_actions,"
+                    "video_p75_watched_actions,video_p95_watched_actions,"
+                    "video_thruplay_watched_actions"
+                ),
+                level="account",
+                time_range={"since": since, "until": until},
+                use_account_attribution_setting="true",
+                action_report_time="impression",
             )
         )
 
@@ -150,6 +173,8 @@ class MetaGraphClient:
                 breakdowns=breakdown,
                 time_increment="1",
                 time_range={"since": since, "until": until},
+                use_account_attribution_setting="true",
+                action_report_time="impression",
                 **breakdown_params,
             )
         )

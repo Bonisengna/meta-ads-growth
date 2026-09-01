@@ -43,6 +43,8 @@ def test_insights_serializes_time_range_and_level() -> None:
 
     assert captured[0].url.path.endswith("/act_123/insights")
     assert captured[0].url.params["level"] == "campaign"
+    assert captured[0].url.params["use_account_attribution_setting"] == "true"
+    assert captured[0].url.params["action_report_time"] == "impression"
     assert json.loads(captured[0].url.params["time_range"])["since"] == "2026-08-15"
     fields = captured[0].url.params["fields"].split(",")
     assert "actions" in fields
@@ -61,6 +63,8 @@ def test_breakdown_insights_send_one_supported_dimension() -> None:
 
     assert captured[0].url.params["breakdowns"] == "age"
     assert captured[0].url.params["level"] == "campaign"
+    assert captured[0].url.params["use_account_attribution_setting"] == "true"
+    assert captured[0].url.params["action_report_time"] == "impression"
     assert "actions" in captured[0].url.params["fields"]
 
 
@@ -83,12 +87,31 @@ def test_placement_breakdown_omits_incompatible_actions_field() -> None:
     assert captured[0].url.params["action_breakdowns"] == "[]"
 
 
+def test_period_insights_use_account_level_without_daily_split() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    with MetaGraphClient("token", transport=httpx.MockTransport(handler)) as client:
+        client.list_period_insights("123", "2026-08-01", "2026-08-30")
+
+    params = captured[0].url.params
+    assert params["level"] == "account"
+    assert "time_increment" not in params
+    assert params["use_account_attribution_setting"] == "true"
+    assert params["action_report_time"] == "impression"
+
+
 def test_http_failure_becomes_safe_meta_error() -> None:
     transport = httpx.MockTransport(lambda _request: httpx.Response(401, json={"error": {}}))
 
     with MetaGraphClient("invalid", transport=transport) as client:
         with pytest.raises(MetaGraphError, match="Falha ao consultar"):
             client.list_ad_accounts()
+
+
 
 
 def test_http_failure_preserves_meta_error_details() -> None:

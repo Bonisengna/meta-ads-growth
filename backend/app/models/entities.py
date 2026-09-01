@@ -111,7 +111,7 @@ class Page(ApiModel, Generic[T]):
 class DashboardMetrics(ApiModel):
     spend: Decimal = Field(Decimal("0"), ge=0, max_digits=14, decimal_places=2, examples=[0.0])
     impressions: int = 0
-    reach: int = 0
+    reach: int | None = None
     clicks: int = 0
     link_clicks: int = 0
     leads: int = 0
@@ -274,6 +274,44 @@ class CampaignOperation(ApiModel):
         return float(value) if value is not None else None
 
 
+MetricQuality = Literal["AVAILABLE", "ESTIMATED", "UNAVAILABLE", "NOT_APPLICABLE"]
+
+
+class MetricDefinition(ApiModel):
+    key: str
+    label: str
+    source: str
+    formula: str
+    aggregation: str
+    quality: MetricQuality
+    note: str | None = None
+
+
+class DataQualityIssue(ApiModel):
+    code: str
+    severity: Literal["INFO", "WARNING", "CRITICAL"]
+    title: str
+    message: str
+
+
+class DataConfidence(ApiModel):
+    status: Literal["TRUSTED", "ATTENTION", "NO_DATA"]
+    source: Literal["META_ADS_INSIGHTS"] = "META_ADS_INSIGHTS"
+    currency: str | None = None
+    timezone: str | None = None
+    attribution_model: Literal["ACCOUNT_SETTING"] = "ACCOUNT_SETTING"
+    action_report_time: Literal["IMPRESSION"] = "IMPRESSION"
+    includes_today: bool
+    current_day_is_partial: bool
+    archived_history_included: bool = True
+    metrics_through: date | None = None
+    last_entities_synced_at: datetime | None = None
+    last_metrics_synced_at: datetime | None = None
+    last_successful_sync_at: datetime | None = None
+    metric_catalog: list[MetricDefinition] = Field(default_factory=list)
+    issues: list[DataQualityIssue] = Field(default_factory=list)
+
+
 class DashboardRead(ApiModel):
     clients: int
     meta_accounts: int
@@ -294,13 +332,14 @@ class DashboardRead(ApiModel):
     insights: list["PerformanceInsight"]
     recommendations: list["RecommendationRead"]
     breakdowns: "BreakdownAnalytics"
+    data_confidence: DataConfidence
 
 
 class BreakdownPoint(ApiModel):
     value: str
     spend: Decimal
     impressions: int
-    reach: int
+    reach: int | None = None
     link_clicks: int
     leads: int
     conversations: int

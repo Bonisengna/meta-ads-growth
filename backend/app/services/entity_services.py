@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
@@ -285,6 +285,9 @@ class DashboardService:
             "insights": build_insights(current_metrics, previous_metrics),
             "recommendations": recommendations,
             "breakdowns": breakdowns,
+            "data_confidence": build_data_confidence(
+                current[0], current[1], scope, analytics, current_metrics
+            ),
         }
 
     def _investment_pacing(self, scope: dict[str, object]) -> dict[str, object]:
@@ -711,6 +714,8 @@ class DashboardService:
             "campaign_ranking": ranking,
             "adset_ranking": adset_ranking,
             "ad_ranking": ad_ranking,
+            "metric_row_count": len(rows),
+            "latest_metric_date": max(by_date) if by_date else None,
         }
 
     def _entity_ranking(
@@ -805,7 +810,6 @@ def period_payload(date_from: date, date_to: date) -> dict[str, object]:
 def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
     spend = sum((Decimal(str(row.get("spend") or 0)) for row in rows), Decimal("0"))
     impressions = sum(int(row.get("impressions") or 0) for row in rows)
-    reach = sum(int(row.get("reach") or 0) for row in rows)
     clicks = sum(int(row.get("clicks") or 0) for row in rows)
     link_clicks = sum(int(row.get("link_clicks") or 0) for row in rows)
     leads = sum(int(row.get("leads") or 0) for row in rows)
@@ -818,16 +822,13 @@ def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
     video_p75 = sum(int(row.get("video_p75") or 0) for row in rows)
     video_p95 = sum(int(row.get("video_p95") or 0) for row in rows)
     thruplays = sum(int(row.get("thruplays") or 0) for row in rows)
-    frequency_weight = sum(
-        Decimal(str(row.get("frequency") or 0)) * Decimal(int(row.get("impressions") or 0))
-        for row in rows
-        if row.get("frequency") not in (None, "")
-    )
-    frequency_impressions = sum(
-        int(row.get("impressions") or 0)
-        for row in rows
-        if row.get("frequency") not in (None, "")
-    )
+    reach = int(rows[0].get("reach") or 0) if len(rows) == 1 else None
+    if len(rows) == 1 and rows[0].get("frequency") not in (None, ""):
+        frequency = Decimal(str(rows[0]["frequency"]))
+    elif len(rows) == 1 and reach:
+        frequency = safe_divide(Decimal(impressions), Decimal(reach))
+    else:
+        frequency = None
     return {
         "spend": spend,
         "impressions": impressions,
@@ -849,7 +850,7 @@ def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
         "cpc": safe_divide(spend, Decimal(clicks)),
         "cpm": safe_divide(spend * 1000, Decimal(impressions)),
         "link_ctr": safe_divide(Decimal(link_clicks) * 100, Decimal(impressions)),
-        "frequency": safe_divide(frequency_weight, Decimal(frequency_impressions)),
+        "frequency": frequency,
         "landing_page_view_rate": safe_divide(
             Decimal(landing_page_views) * 100, Decimal(link_clicks)
         ),
@@ -866,6 +867,116 @@ def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
         "video_p50_rate": safe_divide(Decimal(video_p50) * 100, Decimal(video_plays)),
         "video_p75_rate": safe_divide(Decimal(video_p75) * 100, Decimal(video_plays)),
         "video_p95_rate": safe_divide(Decimal(video_p95) * 100, Decimal(video_plays)),
+    }
+
+
+def _oldest_timestamp(rows: list[dict[str, object]], key: str) -> datetime | None:
+    values: list[datetime] = []
+    for row in rows:
+        raw = row.get(key)
+        if not raw:
+            continue
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        values.append(parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC))
+    return min(values) if values else None
+
+
+def build_data_confidence(
+    date_from: date,
+    date_to: date,
+    scope: dict[str, object],
+    analytics: dict[str, object],
+    metrics: dict[str, object],
+) -> dict[str, object]:
+    account_rows = scope["account_rows"]
+    currencies = {str(row["currency"]) for row in account_rows if row.get("currency")}
+    timezones = {str(row["timezone"]) for row in account_rows if row.get("timezone")}
+    row_count = int(analytics["metric_row_count"])
+    today = date.today()
+    includes_today = date_from <= today <= date_to
+    latest = analytics.get("latest_metric_date")
+    metrics_through = date.fromisoformat(str(latest)) if latest else None
+    current_day_is_partial = includes_today and metrics_through == today
+    last_entities = _oldest_timestamp(account_rows, "last_entities_synced_at")
+    last_metrics = _oldest_timestamp(account_rows, "last_metrics_synced_at")
+    last_success = _oldest_timestamp(account_rows, "last_successful_sync_at")
+    issues: list[dict[str, str]] = []
+
+    if current_day_is_partial:
+        issues.append({
+            "code": "CURRENT_DAY_PARTIAL", "severity": "INFO",
+            "title": "O dia atual ainda está em andamento",
+            "message": "A Meta pode ajustar os números de hoje após novas entregas e atribuições.",
+        })
+    if row_count > 1:
+        issues.append({
+            "code": "NON_ADDITIVE_METRICS_UNAVAILABLE", "severity": "INFO",
+            "title": "Alcance e frequência não foram somados",
+            "message": "Essas métricas contam pessoas e não podem ser somadas entre dias ou campanhas sem duplicação.",
+        })
+    if len(currencies) > 1:
+        issues.append({
+            "code": "MIXED_CURRENCY", "severity": "WARNING",
+            "title": "Há mais de uma moeda no filtro",
+            "message": "Valores monetários não são totalizados como se pertencessem à mesma moeda.",
+        })
+    if len(timezones) > 1:
+        issues.append({
+            "code": "MIXED_TIMEZONE", "severity": "WARNING",
+            "title": "Há mais de um fuso horário no filtro",
+            "message": "Os limites do dia podem variar entre as contas selecionadas.",
+        })
+    if account_rows and last_metrics is None:
+        issues.append({
+            "code": "METRICS_NOT_SYNCED", "severity": "CRITICAL",
+            "title": "Métricas ainda não sincronizadas",
+            "message": "Execute a sincronização antes de usar o período para decisões.",
+        })
+    elif last_metrics and datetime.now(UTC) - last_metrics > timedelta(hours=26):
+        issues.append({
+            "code": "METRICS_STALE", "severity": "WARNING",
+            "title": "Dados possivelmente desatualizados",
+            "message": "A última coleta de uma das contas ocorreu há mais de 26 horas.",
+        })
+    if int(metrics["link_clicks"]) > 0 and int(metrics["landing_page_views"]) == 0:
+        issues.append({
+            "code": "LANDING_PAGE_DATA_UNAVAILABLE", "severity": "INFO",
+            "title": "Chegadas à página não disponíveis",
+            "message": "A Meta registrou cliques, mas não informou visualizações da página de destino.",
+        })
+
+    available = "AVAILABLE" if row_count else "UNAVAILABLE"
+    non_additive = "AVAILABLE" if row_count == 1 else "UNAVAILABLE"
+    catalog = [
+        {"key": "spend", "label": "Investimento", "source": "Meta Ads Insights", "formula": "Valor gasto no período", "aggregation": "Soma", "quality": available},
+        {"key": "impressions", "label": "Impressões", "source": "Meta Ads Insights", "formula": "Exibições no período", "aggregation": "Soma", "quality": available},
+        {"key": "reach", "label": "Alcance", "source": "Meta Ads Insights", "formula": "Pessoas únicas alcançadas", "aggregation": "Não aditiva", "quality": non_additive, "note": "Disponível somente quando o resultado vem de uma única linha exata."},
+        {"key": "frequency", "label": "Frequência", "source": "Meta Ads Insights", "formula": "Impressões ÷ alcance", "aggregation": "Não aditiva", "quality": non_additive},
+        {"key": "ctr", "label": "CTR", "source": "Calculada", "formula": "Cliques ÷ impressões × 100", "aggregation": "Recalculada pelos totais", "quality": available},
+        {"key": "cpc", "label": "CPC", "source": "Calculada", "formula": "Investimento ÷ cliques", "aggregation": "Recalculada pelos totais", "quality": available},
+        {"key": "cpm", "label": "CPM", "source": "Calculada", "formula": "Investimento ÷ impressões × 1.000", "aggregation": "Recalculada pelos totais", "quality": available},
+        {"key": "cpl", "label": "CPL", "source": "Calculada", "formula": "Investimento ÷ leads", "aggregation": "Recalculada pelos totais", "quality": available},
+        {"key": "landing_page_view_rate", "label": "Taxa de chegada", "source": "Calculada", "formula": "Visualizações da página ÷ cliques no link × 100", "aggregation": "Recalculada pelos totais", "quality": available},
+    ]
+    if row_count == 0:
+        status = "NO_DATA"
+    elif any(item["severity"] in {"WARNING", "CRITICAL"} for item in issues):
+        status = "ATTENTION"
+    else:
+        status = "TRUSTED"
+    return {
+        "status": status,
+        "currency": next(iter(currencies)) if len(currencies) == 1 else None,
+        "timezone": next(iter(timezones)) if len(timezones) == 1 else None,
+        "includes_today": includes_today,
+        "current_day_is_partial": current_day_is_partial,
+        "archived_history_included": True,
+        "metrics_through": metrics_through,
+        "last_entities_synced_at": last_entities,
+        "last_metrics_synced_at": last_metrics,
+        "last_successful_sync_at": last_success,
+        "metric_catalog": catalog,
+        "issues": issues,
     }
 
 

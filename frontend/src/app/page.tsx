@@ -114,6 +114,46 @@ function friendlyDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 }
 
+function DataConfidencePanel({ confidence }: { confidence: Dashboard["data_confidence"] }) {
+  const statusCopy = confidence.status === "TRUSTED"
+    ? "Dados prontos para análise"
+    : confidence.status === "NO_DATA"
+      ? "Sem dados neste período"
+      : "Dados exigem atenção";
+  const syncedAt = confidence.last_metrics_synced_at
+    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(confidence.last_metrics_synced_at))
+    : "Ainda não sincronizado";
+  const qualityCopy = {
+    AVAILABLE: "Disponível",
+    ESTIMATED: "Estimativa",
+    UNAVAILABLE: "Indisponível neste recorte",
+    NOT_APPLICABLE: "Não se aplica",
+  } as const;
+  return <section className={`data-confidence ${confidence.status.toLowerCase()}`} aria-labelledby="data-confidence-title">
+    <div className="data-confidence-summary">
+      <div><span className="confidence-dot" aria-hidden="true" /><div><strong id="data-confidence-title">{statusCopy}</strong><small>Fonte: Meta Ads Insights</small></div></div>
+      <dl>
+        <div><dt>Moeda</dt><dd>{confidence.currency ?? "Múltiplas ou não informada"}</dd></div>
+        <div><dt>Fuso da conta</dt><dd>{confidence.timezone ?? "Múltiplos ou não informado"}</dd></div>
+        <div><dt>Última coleta</dt><dd>{syncedAt}</dd></div>
+        <div><dt>Atribuição</dt><dd>Configuração da conta · por impressão</dd></div>
+      </dl>
+    </div>
+    {confidence.issues.length > 0 && <div className="confidence-issues">{confidence.issues.map((issue) => <p className={issue.severity.toLowerCase()} key={issue.code}><strong>{issue.title}</strong><span>{issue.message}</span></p>)}</div>}
+    <details className="metric-methodology">
+      <summary>Como os indicadores são calculados</summary>
+      <div className="metric-catalog">{confidence.metric_catalog.map((metric) => <article key={metric.key}>
+        <div><strong>{metric.label}</strong><span className={`quality ${metric.quality.toLowerCase()}`}>{qualityCopy[metric.quality]}</span></div>
+        <p>{metric.formula}</p>
+        <small>{metric.source} · {metric.aggregation}</small>
+        {metric.note && <em>{metric.note}</em>}
+      </article>)}</div>
+      <p className="history-note">Campanhas, conjuntos e anúncios arquivados continuam incluídos no histórico do período.</p>
+    </details>
+  </section>;
+}
+
+
 function metricValue(key: keyof Metrics, value: number | null | undefined) {
   if (value == null) return "—";
   if (["spend", "cpl", "cpc", "cpm", "cost_per_landing_page_view"].includes(key)) return currency.format(value);
@@ -737,6 +777,7 @@ export default function Home() {
     {view === "settings" ? <section className="workspace"><SettingsPanel token={session.access_token} clients={clients} userEmail={session.user.email ?? "Usuário autenticado"} onUpdatePassword={updateAuthenticatedPassword} onClientsChanged={setClients} onSessionExpired={expireSession} /></section> : <section className={`workspace${view === "dashboard" ? " dashboard-workspace" : ""}`} id="dashboard-top"><header className={view === "dashboard" ? "dashboard-header" : ""}><div><p className="eyebrow coral">{pageCopy.eyebrow}</p><h1>{view === "dashboard" ? <>Olá, <span>{userName}</span></> : pageCopy.title}</h1><p>{pageCopy.subtitle}</p>{view === "dashboard" && <div className="context-summary" aria-label="Contexto selecionado"><span>{selectedClientName}</span><i aria-hidden="true">›</i><span>{selectedAccountName}</span><i aria-hidden="true">›</i><span>{selectedCampaignName}</span></div>}</div></header>
       <section className="filters"><div className="filter-heading"><span className="filter-icon"><DashboardIcon name="filter" /></span><div><strong>Filtrar resultados</strong><small>Escolha o período e refine somente se precisar.</small></div></div><label>Período<select value={filters.days} onChange={(e) => updateFilters({ ...filters, days: Number(e.target.value) })}>{periods.map((days) => <option key={days} value={days}>Últimos {days} dias</option>)}</select></label><label>Cliente<select value={filters.clientId} onChange={(e) => updateFilters({ ...filters, clientId: e.target.value, accountId: "", campaignId: "" })}><option value="">Todos</option>{clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Conta<select value={filters.accountId} onChange={(e) => updateFilters({ ...filters, accountId: e.target.value, campaignId: "" })}><option value="">Todas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Campanha<select value={filters.campaignId} onChange={(e) => updateFilters({ ...filters, campaignId: e.target.value })}><option value="">Todas</option>{campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="filter-actions">{hasFilters && <button className="clear-button" onClick={clearFilters}>Limpar</button>}<button className="primary-button" onClick={() => void loadData()} disabled={loading}>{loading ? "Atualizando…" : "Ver resultados"}</button></div></section>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => void loadData()}>Tentar novamente</button></div>}
+      {dashboard && <DataConfidencePanel confidence={dashboard.data_confidence} />}
       {metaHealth && metaHealth.status !== "HEALTHY" && <div className={`sync-health-banner ${metaHealth.status.toLowerCase()}`}><strong>{systemStatus.label}</strong><span>{metaHealth.status === "DEGRADED" ? "As métricas principais foram coletadas, mas algum detalhamento ainda precisa ser atualizado." : metaHealth.status === "UNCONFIGURED" ? "Configure a integração com a Meta antes de iniciar as coletas." : "A última coleta não foi concluída. Os dados exibidos podem estar desatualizados."}</span></div>}
       {loading && !dashboard && <section className="dashboard-loading" aria-label="Carregando painel"><div /><div /><div /><div /></section>}
       {!loading && !dashboard && !error && <div className="empty-state dashboard-empty"><strong>O painel ainda não possui informações.</strong><span>Verifique a conexão Meta em Ajustes ou atualize os resultados.</span><button onClick={() => navigate("settings")}>Abrir Ajustes</button></div>}

@@ -13,6 +13,7 @@ A documentação operacional do n8n pertence à branch `n8n-operacional`.
 
 Fases recentes:
 
+- [Gate 1 — Confiança e semântica dos dados](fases/gate-1-confianca-dados.md)
 - [Fase 5 — Coleta histórica e dashboard](fases/fase-5-historico-dashboard.md)
 - [Fase 6 — Automação da sincronização](fases/fase-6-automacao-sincronizacao.md)
 - [Fase 7 — Observabilidade e falhas](fases/fase-7-observabilidade.md)

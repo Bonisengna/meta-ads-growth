@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID
@@ -11,6 +11,7 @@ from app.services.entity_services import (
     EntityNotFoundError,
     MetricService,
     aggregate_metrics,
+    build_data_confidence,
     build_insights,
     build_recommendations,
     build_investment_pacing,
@@ -133,7 +134,8 @@ def test_aggregate_calculates_business_metrics() -> None:
          "thruplays": 25},
     ])
     assert result["spend"] == Decimal("45")
-    assert result["frequency"] == Decimal("1.250000")
+    assert result["reach"] is None
+    assert result["frequency"] is None
     assert result["landing_page_views"] == 35
     assert result["landing_page_view_rate"] == Decimal("77.777778")
     assert result["cost_per_landing_page_view"] == Decimal("1.285714")
@@ -141,6 +143,54 @@ def test_aggregate_calculates_business_metrics() -> None:
     assert result["hook_rate"] == Decimal("26.666667")
     assert result["thruplay_rate"] == Decimal("28.571429")
     assert result["video_p95_rate"] == Decimal("20.000000")
+
+
+def test_single_metric_row_keeps_exact_reach_and_frequency() -> None:
+    result = aggregate_metrics([
+        {"spend": "10", "impressions": 1250, "reach": 1000, "frequency": "1.25"}
+    ])
+
+    assert result["reach"] == 1000
+    assert result["frequency"] == Decimal("1.25")
+
+
+def test_data_confidence_explains_non_additive_metrics() -> None:
+    now = datetime.now(UTC).isoformat()
+    result = build_data_confidence(
+        date(2025, 11, 1), date(2025, 11, 7),
+        {"account_rows": [{
+            "currency": "BRL", "timezone": "America/Sao_Paulo",
+            "last_entities_synced_at": now, "last_metrics_synced_at": now,
+            "last_successful_sync_at": now,
+        }]},
+        {"metric_row_count": 2, "latest_metric_date": "2025-11-07"},
+        {"link_clicks": 10, "landing_page_views": 8},
+    )
+
+    assert result["status"] == "TRUSTED"
+    assert result["currency"] == "BRL"
+    assert result["timezone"] == "America/Sao_Paulo"
+    assert result["metrics_through"] == date(2025, 11, 7)
+    reach = next(item for item in result["metric_catalog"] if item["key"] == "reach")
+    assert reach["quality"] == "UNAVAILABLE"
+    assert any(issue["code"] == "NON_ADDITIVE_METRICS_UNAVAILABLE" for issue in result["issues"])
+
+
+def test_data_confidence_warns_about_mixed_currency() -> None:
+    now = datetime.now(UTC).isoformat()
+    result = build_data_confidence(
+        date(2025, 11, 1), date(2025, 11, 1),
+        {"account_rows": [
+            {"currency": "BRL", "timezone": "America/Sao_Paulo", "last_metrics_synced_at": now},
+            {"currency": "USD", "timezone": "America/Sao_Paulo", "last_metrics_synced_at": now},
+        ]},
+        {"metric_row_count": 1, "latest_metric_date": "2025-11-01"},
+        {"link_clicks": 0, "landing_page_views": 0},
+    )
+
+    assert result["status"] == "ATTENTION"
+    assert result["currency"] is None
+    assert any(issue["code"] == "MIXED_CURRENCY" for issue in result["issues"])
 
 
 def test_budget_helpers_compare_configured_budget_and_real_spend() -> None:

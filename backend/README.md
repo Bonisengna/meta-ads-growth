@@ -266,3 +266,21 @@ dashboard também devolve:
 Os campos são atualizados pela sincronização Meta já existente. Entidades que
 deixam de operar continuam preservadas como `ARCHIVED`; itens pausados são
 identificados como `PAUSED` para permitir o filtro operacional.
+
+## Gate 1 — confiança dos dados
+
+O dashboard informa moeda, fuso, atribuição, última coleta, parcialidade do dia
+atual e disponibilidade das métricas. Alcance e frequência não são somados
+entre dias ou campanhas, pois representam pessoas únicas e uma razão dependente
+desse alcance.
+
+Para conferir Supabase e Meta em 7, 30, 180 e 360 dias:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\reconcile_meta.py 742175035567342
+```
+
+O comando é somente leitura e compara as métricas aditivas. A definição completa,
+os critérios de aceite e o procedimento de correção estão em:
+
+- `../docs/fases/gate-1-confianca-dados.md`
