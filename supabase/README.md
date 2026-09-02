@@ -34,7 +34,9 @@ supabase/
     ├── 0009_integration_alerts_account_index.sql
     ├── 0010_user_client_access_rls.sql
     ├── ...
-    └── 0019_operational_reliability.sql
+    ├── 0019_operational_reliability.sql
+    ├── 0020_sync_control.sql
+    └── 0021_sync_control_indexes.sql
 ```
 
 ### 0001_app_health.sql
@@ -70,6 +72,19 @@ sincronizadas e separa os horários de atualização das entidades, métricas e
 execuções totalmente concluídas. O campo legado `last_synced_at` é preservado
 por compatibilidade, mas não deve ser usado para afirmar que as métricas estão
 atuais.
+
+### 0020_sync_control.sql
+
+Cria a fila persistente de sincronizações solicitadas pelo painel e adiciona
+progresso, origem, cliente e vínculo de recuperação a `sync_runs`. O worker
+consome a fila sem depender de uma requisição HTTP longa. A fila é protegida
+por RLS, acessível somente pela `service_role` e impede dois pedidos abertos
+para o mesmo cliente.
+### 0021_sync_control_indexes.sql
+
+Adiciona índices aos vínculos da fila e do histórico identificados pelo
+Performance Advisor após a aplicação da migration `0020`.
+
 
 ## Validação realizada no projeto real
 

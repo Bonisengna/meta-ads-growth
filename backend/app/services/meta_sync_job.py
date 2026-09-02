@@ -10,6 +10,10 @@ def run_meta_sync(
     lookback_days: int | None = None,
     *,
     settings: Settings | None = None,
+    client_id: str | None = None,
+    trigger_source: str = "SCHEDULED",
+    requested_by: str | None = None,
+    recovery_of: str | None = None,
 ) -> dict[str, Any]:
     """Executa uma coleta completa usando somente configuração de servidor."""
 
@@ -31,4 +35,10 @@ def run_meta_sync(
             max_attempts=current.meta_sync_max_attempts,
             retry_delay_seconds=current.meta_sync_retry_delay_seconds,
             lock_minutes=current.meta_sync_lock_minutes,
-        ).run(days)
+        ).run(
+            days,
+            client_id=client_id,
+            trigger_source=trigger_source,
+            requested_by=requested_by,
+            recovery_of=recovery_of,
+        )

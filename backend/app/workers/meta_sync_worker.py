@@ -6,9 +6,12 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.config.settings import get_settings
+from app.database.supabase import get_supabase_client
+from app.services.meta_sync_control_service import claim_next_request, finish_request
 from app.services.meta_sync_job import run_meta_sync
 from app.services.meta_sync_runner import SyncAlreadyRunningError, safe_error
 
+POLL_SECONDS = 5.0
 
 def parse_daily_time(value: str) -> clock_time:
     """Converte HH:MM em horário diário estrito."""
@@ -65,6 +68,39 @@ def run_once() -> None:
     except Exception as exc:
         emit("sync_failed", status="FAILED", message=safe_error(exc))
 
+def process_pending_requests() -> int:
+    """Consome pedidos persistentes; devolve quantos foram concluídos."""
+
+    client = get_supabase_client()
+    processed = 0
+    while request := claim_next_request(client):
+        try:
+            result = run_meta_sync(
+                int(request["lookback_days"]),
+                client_id=str(request["client_id"]),
+                trigger_source="RECOVERY" if request.get("recovery_of") else "MANUAL",
+                requested_by=str(request["requested_by"]) if request.get("requested_by") else None,
+                recovery_of=str(request["recovery_of"]) if request.get("recovery_of") else None,
+            )
+            finish_request(client, str(request["id"]), result)
+            processed += 1
+            emit(
+                "sync_request_finished",
+                request_id=request["id"],
+                run_id=result["run_id"],
+                status=result["status"],
+            )
+        except SyncAlreadyRunningError:
+            client.table("sync_requests").update(
+                {"status": "PENDING", "started_at": None}
+            ).eq("id", request["id"]).execute()
+            break
+        except Exception as exc:
+            finish_request(client, str(request["id"]), None, exc)
+            processed += 1
+            emit("sync_request_failed", request_id=request["id"], message=safe_error(exc))
+    return processed
+
 
 def main() -> None:
     settings = get_settings()
@@ -81,17 +117,23 @@ def main() -> None:
     if settings.meta_sync_run_on_start:
         run_once()
 
+    scheduled = next_scheduled_run(
+        datetime.now(UTC), settings.meta_sync_daily_time, settings.timezone
+    )
+    emit("sync_scheduled", scheduled_at=scheduled.isoformat())
     while True:
         now = datetime.now(UTC)
-        scheduled = next_scheduled_run(
-            now,
-            settings.meta_sync_daily_time,
-            settings.timezone,
-        )
-        wait_seconds = max(1.0, (scheduled - now).total_seconds())
-        emit("sync_scheduled", scheduled_at=scheduled.isoformat())
-        time.sleep(wait_seconds)
-        run_once()
+        try:
+            process_pending_requests()
+        except Exception as exc:
+            emit("sync_queue_poll_failed", status="FAILED", message=safe_error(exc))
+        if now >= scheduled:
+            run_once()
+            scheduled = next_scheduled_run(
+                datetime.now(UTC), settings.meta_sync_daily_time, settings.timezone
+            )
+            emit("sync_scheduled", scheduled_at=scheduled.isoformat())
+        time.sleep(min(POLL_SECONDS, max(1.0, (scheduled - datetime.now(UTC)).total_seconds())))
 
 
 if __name__ == "__main__":

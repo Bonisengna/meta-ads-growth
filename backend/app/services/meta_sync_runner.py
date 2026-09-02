@@ -44,15 +44,32 @@ class MetaSyncRunner:
         self.sleep = sleep
         self.now = now
 
-    def run(self, lookback_days: int = 3) -> dict[str, Any]:
+    def run(
+        self,
+        lookback_days: int = 3,
+        *,
+        client_id: str | None = None,
+        trigger_source: str = "SCHEDULED",
+        requested_by: str | None = None,
+        recovery_of: str | None = None,
+    ) -> dict[str, Any]:
         if not 1 <= lookback_days <= 360:
             raise ValueError("lookback_days deve estar entre 1 e 360")
+        if trigger_source not in {"SCHEDULED", "MANUAL", "RECOVERY"}:
+            raise ValueError("trigger_source inválido")
 
-        run = self._acquire(lookback_days)
+        run = self._acquire(
+            lookback_days, client_id, trigger_source, requested_by, recovery_of
+        )
         started_at = datetime.fromisoformat(run["started_at"])
         try:
-            accounts = self._active_accounts()
-            results = [self._sync_account(account, lookback_days) for account in accounts]
+            accounts = self._active_accounts(client_id)
+            self._progress(run["id"], "PREPARING", None, 0, len(accounts))
+            results = []
+            for index, account in enumerate(accounts):
+                self._progress(run["id"], "SYNCING", account.get("name"), index, len(accounts))
+                results.append(self._sync_account(account, lookback_days))
+                self._progress(run["id"], "SYNCING", account.get("name"), index + 1, len(accounts))
             successful = sum(result["status"] == "SUCCESS" for result in results)
             partial = sum(result["status"] == "PARTIAL" for result in results)
             failed = sum(result["status"] == "FAILED" for result in results)
@@ -71,9 +88,13 @@ class MetaSyncRunner:
                 "accounts_partial": partial,
                 "accounts_failed": failed,
                 "entity_changes": entity_changes,
+                "trigger_source": trigger_source,
+                "client_id": client_id,
+                "recovery_of": recovery_of,
                 "accounts": results,
             }
             self._update_token_alert(results, successful + partial > 0)
+            self._update_account_alerts(accounts, results)
             self._finish(run["id"], started_at, summary)
             return summary
         except Exception as exc:
@@ -91,14 +112,15 @@ class MetaSyncRunner:
             self._finish(run["id"], started_at, summary)
             raise
 
-    def _active_accounts(self) -> list[dict[str, Any]]:
-        response = (
+    def _active_accounts(self, client_id: str | None = None) -> list[dict[str, Any]]:
+        query = (
             self.supabase.table("meta_accounts")
             .select("id,client_id,meta_account_id,name")
             .eq("status", "ACTIVE")
-            .order("name")
-            .execute()
         )
+        if client_id:
+            query = query.eq("client_id", client_id)
+        response = query.order("name").execute()
         return response.data or []
 
     def _sync_account(self, account: dict[str, Any], lookback_days: int) -> dict[str, Any]:
@@ -214,7 +236,59 @@ class MetaSyncRunner:
                 .execute()
             )
 
-    def _acquire(self, lookback_days: int) -> dict[str, Any]:
+    def _update_account_alerts(
+        self, accounts: list[dict[str, Any]], results: list[dict[str, Any]]
+    ) -> None:
+        by_meta_id = {str(row["meta_account_id"]): row for row in accounts}
+        for result in results:
+            account = by_meta_id.get(str(result["meta_account_id"]))
+            if not account:
+                continue
+            scope_key = str(account["id"])
+            open_rows = (
+                self.supabase.table("integration_alerts")
+                .select("id")
+                .eq("alert_type", "ACCOUNT_STALE")
+                .eq("scope_key", scope_key)
+                .eq("status", "OPEN")
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            if result["status"] == "FAILED" and not open_rows:
+                (
+                    self.supabase.table("integration_alerts")
+                    .insert(
+                        {
+                            "meta_account_id": account["id"],
+                            "scope_key": scope_key,
+                            "alert_type": "ACCOUNT_STALE",
+                            "severity": "ERROR",
+                            "title": f"Conta sem atualização: {account.get('name') or result['meta_account_id']}",
+                            "message": "A coleta falhou. Reprocesse a execução pelo painel.",
+                            "status": "OPEN",
+                        }
+                    )
+                    .execute()
+                )
+            elif result["status"] in {"SUCCESS", "PARTIAL"} and open_rows:
+                now = self.now().isoformat()
+                (
+                    self.supabase.table("integration_alerts")
+                    .update({"status": "RESOLVED", "resolved_at": now, "updated_at": now})
+                    .eq("id", open_rows[0]["id"])
+                    .execute()
+                )
+
+    def _acquire(
+        self,
+        lookback_days: int,
+        client_id: str | None,
+        trigger_source: str,
+        requested_by: str | None,
+        recovery_of: str | None,
+    ) -> dict[str, Any]:
         now = self.now()
         # Libera uma execução abandonada somente depois do vencimento da trava.
         (
@@ -241,6 +315,10 @@ class MetaSyncRunner:
                         "started_at": now.isoformat(),
                         "lock_expires_at": (now + timedelta(minutes=self.lock_minutes)).isoformat(),
                         "lookback_days": lookback_days,
+                        "client_id": client_id,
+                        "trigger_source": trigger_source,
+                        "requested_by": requested_by,
+                        "recovery_of": recovery_of,
                     }
                 )
                 .execute()
@@ -264,6 +342,29 @@ class MetaSyncRunner:
             raise RuntimeError("Supabase não retornou o registro da execução.")
         return rows[0]
 
+    def _progress(
+        self,
+        run_id: str,
+        stage: str,
+        account_name: str | None,
+        current: int,
+        total: int,
+    ) -> None:
+        (
+            self.supabase.table("sync_runs")
+            .update(
+                {
+                    "current_stage": stage,
+                    "current_account_name": account_name,
+                    "progress_current": current,
+                    "progress_total": total,
+                    "lock_expires_at": (self.now() + timedelta(minutes=self.lock_minutes)).isoformat(),
+                }
+            )
+            .eq("id", run_id)
+            .execute()
+        )
+
     def _finish(self, run_id: str, started_at: datetime, summary: dict[str, Any]) -> None:
         finished_at = self.now()
         duration_ms = max(0, int((finished_at - started_at).total_seconds() * 1000))
@@ -284,6 +385,10 @@ class MetaSyncRunner:
                     "accounts_failed": summary["accounts_failed"],
                     "result": summary,
                     "error_summary": error,
+                    "current_stage": "FINISHED",
+                    "current_account_name": None,
+                    "progress_current": summary["accounts_total"],
+                    "progress_total": summary["accounts_total"],
                 }
             )
             .eq("id", run_id)

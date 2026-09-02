@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiGetStatus, apiPatch, apiPost, isSessionExpired, query } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
-import type { AdOperation, BreakdownPoint, Campaign, CampaignOperation, Client, Dashboard, EntityPerformance, Improvement, ManagedClient, MetaAccount, MetaHealth, Metrics, Page, Recommendation, SettingsData } from "@/lib/types";
+import type { AdOperation, BreakdownPoint, Campaign, CampaignOperation, Client, Dashboard, EntityPerformance, Improvement, ManagedClient, MetaAccount, MetaHealth, Metrics, Page, Recommendation, SettingsData, SyncRequest, SyncRun } from "@/lib/types";
 
 const periods = [7, 14, 30, 90, 120, 180, 360] as const;
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -416,6 +416,10 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
   const [system, setSystem] = useState({ meta_app_id: "", meta_app_secret: "", system_user_id: "", graph_version: "v25.0", openai_api_key: "" });
   const [managedClients, setManagedClients] = useState<ManagedClient[]>([]);
   const [clientForm, setClientForm] = useState<ClientForm>(emptyClientForm);
+  const [syncRequests, setSyncRequests] = useState<SyncRequest[]>([]);
+  const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
+  const [syncDays, setSyncDays] = useState(3);
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const showFailure = useCallback((cause: unknown, fallback: string) => {
     if (isSessionExpired(cause)) { void onSessionExpired(); return; }
@@ -440,6 +444,21 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
     const timeout = window.setTimeout(() => void refreshClients().catch((cause) => showFailure(cause, "Não foi possível carregar os clientes.")), 0);
     return () => window.clearTimeout(timeout);
   }, [refreshClients, showFailure]);
+  const refreshSync = useCallback(async () => {
+    const [requests, runs] = await Promise.all([
+      apiGet<SyncRequest[]>("/api/v1/meta-sync/requests?limit=20", token),
+      apiGet<SyncRun[]>("/api/v1/meta-sync/runs?limit=20", token),
+    ]);
+    setSyncRequests(requests); setSyncRuns(runs);
+  }, [token]);
+  useEffect(() => {
+    if (section !== "meta") return;
+    const initial = window.setTimeout(
+      () => void refreshSync().catch((cause) => showFailure(cause, "Não foi possível consultar as coletas.")), 0,
+    );
+    const interval = window.setInterval(() => void refreshSync().catch(() => undefined), 5000);
+    return () => { window.clearTimeout(initial); window.clearInterval(interval); };
+  }, [refreshSync, section, showFailure]);
 
   async function saveMeta(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
@@ -463,6 +482,17 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
     finally { setBusy(false); }
   }
 
+  async function requestSync(recoveryRunId?: string) {
+    if (!meta.client_id) { setMessage("Selecione um cliente antes de sincronizar."); return; }
+    setSyncBusy(true); setMessage("");
+    try {
+      if (recoveryRunId) await apiPost<SyncRequest>("/api/v1/meta-sync/recover", token, { run_id: recoveryRunId, client_id: meta.client_id });
+      else await apiPost<SyncRequest>("/api/v1/meta-sync/requests", token, { client_id: meta.client_id, lookback_days: syncDays });
+      setMessage(recoveryRunId ? "Reprocessamento solicitado. O worker continuará mesmo se você sair desta tela." : "Sincronização solicitada. Você pode acompanhar o progresso abaixo.");
+      await refreshSync();
+    } catch (cause) { showFailure(cause, "Não foi possível solicitar a sincronização."); }
+    finally { setSyncBusy(false); }
+  }
   async function changeAccountPassword(event: FormEvent) {
     event.preventDefault();
     setMessage("");
@@ -500,6 +530,13 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
   const formattedDate = metaStatus?.last_validated_at ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(metaStatus.last_validated_at)) : "Ainda não realizada";
   const menu = (id: SettingsSection, label: string, soon = false) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setMessage(""); }}>{label}{soon && <em>em breve</em>}</button>;
   const placeholder = (title: string, description: string) => <div className="settings-card settings-placeholder"><h2>{title}</h2><p>{description}</p><span>Esta área será liberada em uma próxima etapa.</span></div>;
+  const clientRequests = syncRequests.filter((item) => item.client_id === meta.client_id);
+  const latestRequest = clientRequests[0];
+  const latestRun = syncRuns.find((item) => item.id === latestRequest?.sync_run_id) ?? syncRuns.find((item) => item.client_id === meta.client_id);
+  const syncStatus = latestRequest?.status === "PENDING" ? "PENDING" : latestRun?.status ?? latestRequest?.status;
+  const syncRunning = syncStatus === "PENDING" || syncStatus === "RUNNING";
+  const syncProgress = latestRun?.progress_total ? Math.round((latestRun.progress_current / latestRun.progress_total) * 100) : syncStatus === "SUCCESS" || syncStatus === "PARTIAL" || syncStatus === "FAILED" ? 100 : 0;
+  const entityChanges = latestRun?.result.entity_changes;
 
   return <section className="settings-page"><header><div><p className="eyebrow coral">AJUSTES</p><h1>Configurações</h1><p>Organize conexões e preferências com explicações em cada campo.</p></div></header>
     {message && <div className="settings-message">{message}</div>}
@@ -516,6 +553,12 @@ function SettingsPanel({ token, clients, userEmail, onUpdatePassword, onClientsC
         <label><span>Token de acesso <FieldHelp text="Gere na Meta for Developers ou pelo usuário do sistema, com a permissão Leitura de anúncios (ads_read)." /></span><input type="password" value={meta.access_token} onChange={(e) => setMeta({ ...meta, access_token: e.target.value })} placeholder={metaStatus ? "•••••••• configurado — digite para substituir" : "Cole o token"} required autoComplete="new-password" /></label>
         <div className="secret-note">Depois de salvo, o token não pode ser visualizado. Para trocar, informe um novo token.</div><button disabled={busy}>{busy ? "Verificando…" : "Verificar e salvar conexão"}</button>
         {metaStatus && <div className="connection-summary"><h3>Situação da conexão</h3><dl><div><dt>Situação</dt><dd><i /> Conectado</dd></div><div><dt>Permissão</dt><dd>Leitura de anúncios <small>(ads_read)</small></dd></div><div><dt>Conta encontrada</dt><dd>{configText("account_name")}</dd></div><div><dt>Moeda</dt><dd>{configText("currency")}</dd></div><div><dt>Fuso horário</dt><dd>{configText("timezone")}</dd></div><div><dt>Última verificação</dt><dd>{formattedDate}</dd></div></dl></div>}
+        {metaStatus && <section className="sync-control" aria-labelledby="sync-control-title"><div className="sync-control-head"><div><h3 id="sync-control-title">Atualização dos dados</h3><p>A coleta diária revisa os últimos 3 dias. Use um período maior somente para recuperar histórico.</p></div><span className={`sync-status ${(syncStatus ?? "IDLE").toLowerCase()}`}>{syncStatus === "PENDING" ? "Na fila" : syncStatus === "RUNNING" ? "Em andamento" : syncStatus === "SUCCESS" ? "Concluída" : syncStatus === "PARTIAL" ? "Concluída com avisos" : syncStatus === "FAILED" ? "Falhou" : "Pronta"}</span></div>
+          <div className="sync-actions"><label><span>Período da coleta</span><select value={syncDays} onChange={(event) => setSyncDays(Number(event.target.value))} disabled={syncRunning}>{[3,7,30,90,180,360].map((days) => <option key={days} value={days}>{days === 3 ? "Últimos 3 dias (recomendado)" : `Últimos ${days} dias`}</option>)}</select></label><button type="button" onClick={() => void requestSync()} disabled={syncBusy || syncRunning}>{syncBusy ? "Solicitando…" : syncRunning ? "Sincronização em andamento" : "Sincronizar agora"}</button></div>
+          {(latestRequest || latestRun) && <div className="sync-progress" aria-live="polite"><div className="sync-progress-copy"><strong>{syncStatus === "PENDING" ? "Aguardando o worker" : latestRun?.current_account_name ? `Atualizando ${latestRun.current_account_name}` : syncStatus === "RUNNING" ? "Preparando a coleta" : "Última execução"}</strong><span>{latestRun ? `${latestRun.progress_current} de ${latestRun.progress_total} contas` : `Pedido para ${latestRequest?.lookback_days} dias`}</span></div><div className="sync-progress-track" role="progressbar" aria-label="Progresso da sincronização" aria-valuemin={0} aria-valuemax={100} aria-valuenow={syncProgress}><i style={{ width: `${syncProgress}%` }} /></div></div>}
+          {entityChanges && <div className="sync-report"><strong>Relatório da última execução</strong><div>{Object.entries(entityChanges).map(([entity, values]) => <article key={entity}><span>{entity === "meta_accounts" ? "Contas" : entity === "campaigns" ? "Campanhas" : entity === "adsets" ? "Conjuntos" : "Anúncios"}</span><small><b>{values.imported}</b> novos · <b>{values.updated}</b> atualizados · <b>{values.archived}</b> arquivados</small></article>)}</div></div>}
+          {(syncStatus === "FAILED" || syncStatus === "PARTIAL") && latestRun && <div className="sync-recovery"><div><strong>{syncStatus === "FAILED" ? "A coleta não terminou." : "Os dados principais chegaram, mas há detalhamentos pendentes."}</strong><span>{latestRun.error_summary ?? "Reprocesse o mesmo período para completar os dados."}</span></div><button type="button" onClick={() => void requestSync(latestRun.id)} disabled={syncBusy || syncRunning}>Reprocessar execução</button></div>}
+        </section>}
       </form>}
       {section === "meta-app" && <form className="settings-card" onSubmit={saveSystem}><div className="settings-card-head"><div><h2>Aplicativo Meta</h2><p>Configuração global, disponível somente para administrador.</p></div><span className={configured("META_SYSTEM") ? "connection-ok" : "connection-pending"}>{configured("META_SYSTEM") ? "Configurado" : "Pendente"}</span></div>
         <label><span>ID do aplicativo <FieldHelp text="Na Meta for Developers, abra seu aplicativo → Configurações → Básico." /></span><input value={system.meta_app_id} onChange={(e) => setSystem({ ...system, meta_app_id: e.target.value })} /></label>

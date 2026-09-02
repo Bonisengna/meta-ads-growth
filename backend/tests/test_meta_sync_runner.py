@@ -295,3 +295,57 @@ def test_error_log_redacts_credentials() -> None:
     assert "abc.def" not in message
     assert "=hidden" not in message
     assert message.count("[REDACTED]") == 3
+
+def test_three_consecutive_cycles_finish_without_manual_cleanup(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    database = make_database()
+    runner = MetaSyncRunner(  # type: ignore[arg-type]
+        FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None
+    )
+
+    results = [runner.run(3) for _ in range(3)]
+
+    assert [result["status"] for result in results] == ["SUCCESS"] * 3
+    assert all(row["status"] == "SUCCESS" for row in database["sync_runs"])
+    assert all(row["progress_current"] == row["progress_total"] == 1 for row in database["sync_runs"])
+
+
+def test_failed_account_opens_alert_and_recovery_resolves_it(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    database = make_database()
+    database["meta_accounts"][0]["meta_account_id"] = "failed"
+    runner = MetaSyncRunner(  # type: ignore[arg-type]
+        FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None
+    )
+
+    failed = runner.run(3, client_id="c1", trigger_source="MANUAL", requested_by="user-1")
+    account_alert = next(row for row in database["integration_alerts"] if row["alert_type"] == "ACCOUNT_STALE")
+    assert failed["status"] == "FAILED"
+    assert account_alert["status"] == "OPEN"
+
+    database["meta_accounts"][0]["meta_account_id"] = "123"
+    recovered = runner.run(
+        3,
+        client_id="c1",
+        trigger_source="RECOVERY",
+        recovery_of=failed["run_id"],
+        requested_by="user-1",
+    )
+
+    assert recovered["status"] == "SUCCESS"
+    assert recovered["recovery_of"] == failed["run_id"]
+    assert account_alert["status"] == "RESOLVED"
+
+
+def test_manual_sync_is_limited_to_selected_client(monkeypatch) -> None:
+    FakeSyncService.calls = []
+    monkeypatch.setattr(runner_module, "MetaSyncService", FakeSyncService)
+    database = make_database()
+    database["meta_accounts"].append({"id": "a3", "client_id": "c2", "meta_account_id": "456", "name": "Outro", "status": "ACTIVE"})
+
+    result = MetaSyncRunner(FakeSupabase(database), object(), now=lambda: NOW, sleep=lambda _delay: None).run(3, client_id="c1")  # type: ignore[arg-type]
+
+    assert result["accounts_total"] == 1
+    assert not any(call for call in FakeSyncService.calls if "456" in call)
