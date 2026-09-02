@@ -7,6 +7,11 @@ Esta branch contém exclusivamente a evolução do Meta Ads Growth para o SaaS D
 ## Acesso ao sistema
 
 - [Abrir o DescompliADS](https://descompliads.caza85imoveis.com.br/)
+- [Acompanhar gates, entregas e próximos passos](docs/ACOMPANHAMENTO_DO_PROJETO.md)
+
+O acompanhamento acima é a fonte de verdade do projeto. Um gate seguinte só
+entra em implementação depois que o anterior estiver marcado como concluído e
+com suas evidências registradas.
 
 ## Estrutura
 
@@ -112,13 +117,12 @@ A automação n8n operacional é mantida separadamente na branch `n8n-operaciona
 
 ## Fase atual
 
-**Fase 10 — Frontend e inteligência**
+**Gate 2 — Confiabilidade da sincronização: em validação.**
 
-O backend, a sincronização Meta, a observabilidade e a proteção por usuário e
-cliente estão implementados. A primeira entrega da Fase 10 adiciona o frontend
-Next.js autenticado e um dashboard visual somente leitura.
-
-Documentação: `docs/fases/fase-10-frontend-inteligencia.md`.
+O Gate 3 — Central operacional do gestor — está planejado, mas permanece
+bloqueado até a conclusão formal do Gate 2. Consulte o
+[acompanhamento oficial](docs/ACOMPANHAMENTO_DO_PROJETO.md) para ver entregas,
+pendências, evidências e a regra de passagem entre gates.
 
 ## Branches
 
