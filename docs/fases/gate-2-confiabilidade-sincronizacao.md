@@ -1,5 +1,7 @@
 # Gate 2 — Confiabilidade da sincronização
 
+**Estado final: CONCLUÍDO em 02/09/2026.**
+
 ## Contrato operacional
 
 A coleta automática roda no worker separado da API, diariamente às 03:00 no
@@ -95,3 +97,22 @@ Em produção, o aceite final requer ciclos reais consecutivos do worker. Esse
 tempo de observação não deve ser substituído por um teste unitário. Durante a
 observação, acompanhe logs do `meta-worker`, `sync_runs`, `sync_requests` e
 `/api/v1/health/meta`.
+
+## Aceite final
+
+Em 02/09/2026, foram confirmados:
+
+- API e worker implantados na VPS;
+- endpoints de controle presentes no OpenAPI de produção;
+- migrações `0020` e `0021` operantes;
+- dez execuções recentes consecutivas em `SUCCESS`;
+- execução agendada `7a8e5232-8bb9-4934-b87e-01185cf63719` concluída;
+- recuperação da falha `ca114930-ea86-4793-83f7-fc7d9f2ee4a0` pela execução
+  `54e51e98-f798-485c-935a-9cf9e0e7370d`, finalizada como `RECOVERY/SUCCESS`;
+- atualização da conta ativa sem alertas abertos;
+- HTTP `401` no endpoint de execuções sem autenticação;
+- PostgreSQL `42501` na tentativa de acesso anônimo à fila;
+- nenhuma credencial encontrada nos registros examinados;
+- `107` testes de backend, lint e build de produção do frontend aprovados.
+
+Com essas evidências, o Gate 2 foi encerrado e o Gate 3 foi liberado.
