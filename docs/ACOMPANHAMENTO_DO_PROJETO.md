@@ -1,6 +1,6 @@
 # DescompliADS — Acompanhamento oficial do projeto
 
-Atualizado em: **01/09/2026**
+Atualizado em: **02/09/2026 às 12:13 (America/Sao_Paulo)**
 Branch de desenvolvimento: **`meta-ads-pro`**
 
 Este documento é a fonte de verdade do andamento do DescompliADS no GitHub.
@@ -94,7 +94,7 @@ disponibilidade e atualização compreensíveis.
 
 - [x] criar o commit específico do Gate 2;
 - [x] fazer push para `origin/meta-ads-pro`;
-- [ ] implantar a nova versão da API e do worker na VPS;
+- [x] implantar a nova versão da API e do worker na VPS;
 - [ ] confirmar que API e worker usam as migrações `0020` e `0021`;
 - [ ] observar vários ciclos consecutivos na versão implantada;
 - [ ] reproduzir uma falha controlada e comprovar a recuperação em produção;
@@ -105,6 +105,7 @@ disponibilidade e atualização compreensíveis.
 ### Evidências disponíveis
 
 - Commit: `1175da0` — `Complete sync reliability gate`.
+- Deploy da API e do worker na VPS informado em 02/09/2026 às 12:13 (America/Sao_Paulo).
 - Documento: [`docs/fases/gate-2-confiabilidade-sincronizacao.md`](fases/gate-2-confiabilidade-sincronizacao.md).
 
 ## Gate 3 — Central operacional do gestor
@@ -164,6 +165,7 @@ Ao terminar uma sessão relevante, acrescente uma entrada curta:
 | Data | Gate | Estado | O que mudou | Evidência | Próximo passo |
 |---|---|---|---|---|---|
 | 01/09/2026 | Gate 2 | Em validação | Implementação local inventariada; Gate 3 planejado e bloqueado | Documentos dos Gates 1 e 2 + estado do Git | Publicar e validar o Gate 2 |
+| 02/09/2026 12:13 | Gate 2 | Em validação | API e worker implantados na VPS | Implantação informada pela responsável do projeto | Confirmar migrações e observar ciclos consecutivos |
 
 ## Backlog posterior
 
