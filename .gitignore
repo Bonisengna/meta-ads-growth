@@ -21,3 +21,6 @@ backend/.env
 # Sistema operacional
 .DS_Store
 Thumbs.db
+
+# Estado local de ferramentas
+supabase/.temp/

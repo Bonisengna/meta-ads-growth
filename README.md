@@ -117,7 +117,7 @@ A automação n8n operacional é mantida separadamente na branch `n8n-operaciona
 
 ## Fase atual
 
-**Gate 3 — Central operacional do gestor: planejado e liberado.**
+**Gate 3 — Central operacional do gestor: em andamento.**
 
 O Gate 2 foi concluído em produção em 02/09/2026. Consulte o
 [acompanhamento oficial](docs/ACOMPANHAMENTO_DO_PROJETO.md) para ver as

@@ -179,3 +179,20 @@ th,td{border-color:#edf0f4;color:#344054}th{color:#667085;background:#f8fafc}.st
 .sync-actions{align-items:end}.sync-actions label{flex:1}.sync-actions button,.sync-recovery button{flex:0 0 auto;min-height:44px}.sync-progress{display:grid;gap:8px;padding:14px;border-radius:11px;background:#fff}.sync-progress-copy strong{color:#344054;font-size:12px}.sync-progress-copy span{color:#667085;font-size:11px}.sync-progress-track{height:8px;overflow:hidden;border-radius:999px;background:#e8edf5}.sync-progress-track i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#0866ff,#7b2ff7);transition:width .2s ease}
 .sync-report{display:grid;gap:12px}.sync-report>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.sync-report article{display:grid;gap:4px;padding:12px;border:1px solid #e6ebf2;border-radius:10px;background:#fff}.sync-report article span{color:#344054;font-size:12px;font-weight:700}.sync-report article small{color:#667085;font-size:11px}.sync-report article b{color:#0866ff}.sync-recovery{align-items:flex-start;padding:14px;border:1px solid #fedf89;border-radius:11px;background:#fffaeb}.sync-recovery>div{display:grid;gap:4px}.sync-recovery strong{color:#93370d;font-size:12px}.sync-recovery span{color:#b54708;font-size:11px;line-height:1.45}.sync-recovery button{color:#93370d!important;background:#fff!important;box-shadow:none!important}
 @media(max-width:620px){.sync-control-head,.sync-actions,.sync-recovery{align-items:stretch;flex-direction:column}.sync-control-head .sync-status{align-self:flex-start}.sync-actions button,.sync-recovery button{width:100%}.sync-report>div{grid-template-columns:1fr}}
+
+/* Gate 3 — busca hierárquica e triagem de campanhas sem entrega. */
+.operation-toolbar{grid-template-columns:1.5fr repeat(2,minmax(140px,.75fr)) auto auto auto}
+.delivery-filter{min-height:44px;padding:10px 12px;border:1px solid #dce2eb;border-radius:9px;color:#344054;background:#fff;font-size:11px;font-weight:800;cursor:pointer}
+.delivery-filter:hover{border-color:#f79009;background:#fffaeb}
+.delivery-filter.active{border-color:#f79009;color:#93370d;background:#fffaeb;box-shadow:0 0 0 3px #f7900918}
+.delivery-rule{margin:-7px 0 15px;padding:9px 11px;border-left:3px solid #f79009;color:#667085;background:#fffaeb;font-size:11px}
+@media(max-width:1150px){.operation-toolbar{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){.operation-toolbar{grid-template-columns:1fr}.delivery-filter{width:100%;min-height:44px}}
+
+/* Gate 3 — legibilidade da hierarquia no tema claro. */
+.adset-row{background:#f8fafc}
+.ad-row{background:#fff}
+.adset-row td,.ad-row td{color:#344054}
+.adset-row td:first-child small,.creative-summary small,.creative-summary em{color:#667085}
+.creative-summary p{color:#667085}
+.expand-button:disabled{cursor:not-allowed;opacity:.58}

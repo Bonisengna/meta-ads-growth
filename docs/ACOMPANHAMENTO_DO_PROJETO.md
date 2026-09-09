@@ -40,7 +40,7 @@ Para concluir um gate, todos os itens aplicáveis devem estar comprovados:
 |---|---|---|---|
 | Gate 1 | Confiança e semântica dos dados | **CONCLUÍDO** | Sim |
 | Gate 2 | Confiabilidade da sincronização | **CONCLUÍDO** | Sim |
-| Gate 3 | Central operacional do gestor | **PLANEJADO / LIBERADO** | Sim |
+| Gate 3 | Central operacional do gestor | **EM ANDAMENTO** | Sim |
 | Gate 4 | A definir após o Gate 3 | **NÃO DEFINIDO** | Não |
 
 ## Gate 1 — Confiança e semântica dos dados
@@ -127,7 +127,7 @@ disponibilidade e atualização compreensíveis.
 
 ## Gate 3 — Central operacional do gestor
 
-**Estado:** PLANEJADO / LIBERADO
+**Estado:** EM ANDAMENTO
 **Objetivo:** permitir que o gestor trabalhe diariamente sem abrir
 constantemente o Gerenciador da Meta.
 
@@ -136,8 +136,8 @@ constantemente o Gerenciador da Meta.
 - [ ] ritmo do orçamento mensal;
 - [ ] gasto realizado, saldo e projeção;
 - [ ] orçamento por campanha ou conjunto;
-- [ ] identificação de campanhas ativas sem entrega;
-- [ ] pesquisa em campanha, conjunto e anúncio;
+- [x] identificação de campanhas ativas sem entrega;
+- [x] pesquisa em campanha, conjunto e anúncio;
 - [ ] filtros, ordenação e escolha persistente de colunas;
 - [ ] navegação campanha → conjunto → anúncio;
 - [ ] comparação lado a lado entre entidades do mesmo nível;
@@ -163,10 +163,9 @@ constantemente o Gerenciador da Meta.
 
 ### Lacunas conhecidas
 
-- pesquisa e filtros ainda não abrangem plenamente conjuntos e anúncios;
+- filtros ainda não abrangem plenamente conjuntos e anúncios;
 - comparação ainda está limitada a campanhas;
 - métricas de vídeo e página não estão expostas na tabela operacional;
-- regra de “sem entrega” usa somente investimento e precisa considerar impressões;
 - inspeção do criativo ainda é básica;
 - exportação CSV ainda não existe.
 
@@ -183,6 +182,8 @@ Ao terminar uma sessão relevante, acrescente uma entrada curta:
 | 01/09/2026 | Gate 2 | Em validação | Implementação local inventariada; Gate 3 planejado e bloqueado | Documentos dos Gates 1 e 2 + estado do Git | Publicar e validar o Gate 2 |
 | 02/09/2026 12:13 | Gate 2 | Em validação | API e worker implantados na VPS | Implantação informada pela responsável do projeto | Confirmar migrações e observar ciclos consecutivos |
 | 02/09/2026 12:42 | Gate 2 | Concluído | Produção, ciclos, segurança e recuperação validados | 10 sucessos consecutivos; recuperação `54e51e98-f798-485c-935a-9cf9e0e7370d`; 107 testes; lint e build | Iniciar o Gate 3 |
+| 08/09/2026 12:32 | Gate 3 | Em andamento | Busca hierárquica e triagem de campanhas ativas sem entrega implementadas | 109 testes backend; 4 testes frontend; lint, tipos e build | Expor métricas operacionais e ampliar filtros por nível |
+| 09/09/2026 | Gate 3 | Aprovado para commit | Contraste corrigido, expansão automática acessível, testes do frontend integrados ao CI e artefatos locais excluídos do commit | Reverificação independente; contraste mínimo 4,75:1; 109 testes backend; 4 testes frontend; lint, tipos, build e `git diff --check` | Criar commit e executar smoke test controlado na VPS |
 
 ## Backlog posterior
 

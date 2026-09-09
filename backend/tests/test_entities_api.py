@@ -192,6 +192,33 @@ def test_dashboard_serializes_money_as_json_number() -> None:
     assert metrics["hook_rate"] is None
 
 
+def test_dashboard_treats_impressions_as_campaign_delivery_without_spend() -> None:
+    account_id = "22222222-2222-2222-2222-222222222222"
+    campaign_id = "33333333-3333-3333-3333-333333333333"
+    fake = FakeClient(rows={
+        "clients": [{"id": ID}],
+        "meta_accounts": [{"id": account_id, "client_id": ID}],
+        "campaigns": [{
+            "id": campaign_id,
+            "meta_account_id": account_id,
+            "name": "Campanha com impressões",
+            "status": "ACTIVE",
+        }],
+        "campaign_metrics": [{
+            "campaign_id": campaign_id,
+            "metric_date": date.today().isoformat(),
+            "spend": "0",
+            "impressions": 10,
+        }],
+    })
+    override(fake)
+
+    response = client.get("/api/v1/dashboard")
+
+    assert response.status_code == 200
+    assert response.json()["campaign_operations"][0]["has_delivery"] is True
+
+
 def test_dashboard_validates_period_filters() -> None:
     override(FakeClient())
     assert client.get("/api/v1/dashboard?days=30").status_code == 200

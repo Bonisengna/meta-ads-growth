@@ -384,7 +384,7 @@ class DashboardService:
                 "configured_budget": budget,
                 "budget_type": budget_type,
                 "budget_utilization": budget_percent(metrics["spend"], budget),
-                "has_delivery": Decimal(str(metrics["spend"])) > 0,
+                "has_delivery": metrics_have_delivery(metrics),
                 "metrics": metrics,
                 "adsets": sorted(
                     adsets_by_campaign.get(campaign_id, []),
@@ -868,6 +868,14 @@ def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
         "video_p75_rate": safe_divide(Decimal(video_p75) * 100, Decimal(video_plays)),
         "video_p95_rate": safe_divide(Decimal(video_p95) * 100, Decimal(video_plays)),
     }
+
+
+def metrics_have_delivery(metrics: dict[str, object]) -> bool:
+    """Treat spend or impressions as evidence that Meta delivered the campaign."""
+    return (
+        Decimal(str(metrics.get("spend") or 0)) > 0
+        or int(metrics.get("impressions") or 0) > 0
+    )
 
 
 def _oldest_timestamp(rows: list[dict[str, object]], key: str) -> datetime | None:

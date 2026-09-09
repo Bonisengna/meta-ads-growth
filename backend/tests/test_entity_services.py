@@ -17,6 +17,7 @@ from app.services.entity_services import (
     build_investment_pacing,
     compare_metrics,
     configured_budget,
+    metrics_have_delivery,
     resolve_periods,
 )
 
@@ -216,6 +217,12 @@ def test_investment_pacing_handles_missing_budget() -> None:
     )
     assert result["pace_status"] == "NOT_CONFIGURED"
     assert result["projected_spend"] is None
+
+
+def test_delivery_accepts_spend_or_impressions_as_evidence() -> None:
+    assert metrics_have_delivery({"spend": "1.00", "impressions": 0}) is True
+    assert metrics_have_delivery({"spend": "0", "impressions": 1}) is True
+    assert metrics_have_delivery({"spend": "0", "impressions": 0}) is False
 
 
 def test_comparison_returns_percent_and_null_for_zero_baseline() -> None:
