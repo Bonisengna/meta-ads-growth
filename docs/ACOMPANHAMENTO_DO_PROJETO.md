@@ -40,7 +40,7 @@ Para concluir um gate, todos os itens aplicáveis devem estar comprovados:
 |---|---|---|---|
 | Gate 1 | Confiança e semântica dos dados | **CONCLUÍDO** | Sim |
 | Gate 2 | Confiabilidade da sincronização | **CONCLUÍDO** | Sim |
-| Gate 3 | Central operacional do gestor | **EM ANDAMENTO** | Sim |
+| Gate 3 | Central operacional do gestor | **CONCLUÍDO** | Sim |
 | Gate 4 | A definir após o Gate 3 | **NÃO DEFINIDO** | Não |
 
 ## Gate 1 — Confiança e semântica dos dados
@@ -127,7 +127,7 @@ disponibilidade e atualização compreensíveis.
 
 ## Gate 3 — Central operacional do gestor
 
-**Estado:** EM ANDAMENTO
+**Estado:** CONCLUÍDO EM PRODUÇÃO EM 10/09/2026
 **Objetivo:** permitir que o gestor trabalhe diariamente sem abrir
 constantemente o Gerenciador da Meta.
 
@@ -138,17 +138,17 @@ constantemente o Gerenciador da Meta.
 - [x] orçamento por campanha ou conjunto;
 - [x] identificação de campanhas ativas sem entrega;
 - [x] pesquisa em campanha, conjunto e anúncio;
-- [ ] filtros, ordenação e escolha persistente de colunas;
+- [x] filtros, ordenação e escolha persistente de colunas;
 - [x] navegação campanha → conjunto → anúncio;
-- [ ] comparação lado a lado entre entidades do mesmo nível;
-- [ ] criativos com miniatura, texto, título, formato e CTA;
-- [ ] visualizações de vídeo em 3 segundos;
-- [ ] retenção de vídeo em 25%, 50%, 75% e 95%;
-- [ ] ThruPlay e taxa de ThruPlay;
-- [ ] LPV, taxa de chegada, custo por LPV e leads por LPV;
-- [ ] exportação CSV da visualização filtrada;
-- [ ] comportamento responsivo e acessível;
-- [ ] testes automatizados e validação funcional.
+- [x] comparação lado a lado entre entidades do mesmo nível;
+- [x] criativos com miniatura, texto, título, formato e CTA;
+- [x] visualizações de vídeo em 3 segundos;
+- [x] retenção de vídeo em 25%, 50%, 75% e 95%;
+- [x] ThruPlay e taxa de ThruPlay;
+- [x] LPV, taxa de chegada, custo por LPV e leads por LPV;
+- [x] exportação CSV da visualização filtrada;
+- [x] comportamento responsivo e acessível;
+- [x] testes automatizados e validação funcional.
 
 ### Base já existente que deve ser preservada
 
@@ -174,27 +174,38 @@ constantemente o Gerenciador da Meta.
   produção aprovados;
 - [x] commit e push `3baf3fa` realizados na branch `meta-ads-pro`.
 
-### Próxima etapa recomendada — fechamento operacional e aceite em produção
+### Encerramento em produção — 10/09/2026
 
-Esta é uma continuação do **Gate 3**, não o início do Gate 4.
+Evidências do aceite:
 
-1. confirmar o Auto Deploy do commit `3baf3fa` na VPS;
-2. executar smoke test autenticado e validar alcance, frequência e fallback;
-3. ampliar filtros, ordenação e colunas persistentes para campanha, conjunto e anúncio;
-4. permitir comparação entre entidades do mesmo nível;
-5. completar a inspeção de criativos e expor métricas de vídeo e página na visão operacional;
-6. implementar exportação CSV da visualização filtrada;
-7. concluir responsividade, acessibilidade, testes funcionais e evidências do gate.
+- Auto Deploy do commit `3baf3fa` confirmado no frontend e no backend;
+- commit funcional `b1db52a` publicado automaticamente no frontend em cerca de um minuto;
+- smoke test autenticado executado em
+  `https://descompliads.caza85imoveis.com.br/campaigns` sem perda da sessão;
+- campanha `14/11/2025 | JULIO CESAR | ENGAJAMENTO - MARIA REGINA E ARREDORES`
+  reconciliada com `R$ 48,17`, `4.718` impressões, alcance `2.806`, `20`
+  cliques no link e frequência `1,68`;
+- fallback validado com a base real: `R$ 468,73`, `104.429` impressões e
+  `2.930` cliques preservados; alcance e frequência indisponíveis com o aviso
+  `NON_ADDITIVE_METRICS_UNAVAILABLE`;
+- central operacional validada com `12` campanhas, `15` conjuntos e `20`
+  anúncios, incluindo filtros por nível, comparação de duas entidades,
+  criativos, métricas configuráveis, persistência após recarga e exportação CSV;
+- revisão independente de código, segurança, QA, UX e reverificação concluída
+  sem achados P0–P2 pendentes;
+- `113` testes de backend, `7` testes de frontend, lint, tipos, build de produção
+  e `git diff --check` aprovados.
 
 Rastreador de execução: [GitHub Issue #2](https://github.com/Bonisengna/meta-ads-growth/issues/2).
 
-### Lacunas conhecidas
+### Riscos residuais aceitos
 
-- filtros ainda não abrangem plenamente conjuntos e anúncios;
-- comparação ainda está limitada a campanhas;
-- métricas de vídeo e página não estão expostas na tabela operacional;
-- inspeção do criativo ainda é básica;
-- exportação CSV ainda não existe.
+- métricas não aditivas de conjunto e anúncio permanecem indisponíveis quando
+  não existe total exato seguro para o período;
+- alguns criativos podem chegar da Meta com `PRIVACY_CHECK_FAIL` ou sem imagem,
+  texto e destino; a interface exibe fallback sem inventar conteúdo;
+- o CSV é orientado ao Excel em português do Brasil, com `;`, UTF-8 e valores
+  formatados, e neutraliza fórmulas iniciadas por `=`, `+`, `-` ou `@`.
 
 ### Condição para iniciar
 
@@ -212,6 +223,7 @@ Ao terminar uma sessão relevante, acrescente uma entrada curta:
 | 08/09/2026 12:32 | Gate 3 | Em andamento | Busca hierárquica e triagem de campanhas ativas sem entrega implementadas | 109 testes backend; 4 testes frontend; lint, tipos e build | Expor métricas operacionais e ampliar filtros por nível |
 | 09/09/2026 | Gate 3 | Aprovado para commit | Contraste corrigido, expansão automática acessível, testes do frontend integrados ao CI e artefatos locais excluídos do commit | Reverificação independente; contraste mínimo 4,75:1; 109 testes backend; 4 testes frontend; lint, tipos, build e `git diff --check` | Criar commit e executar smoke test controlado na VPS |
 | 10/09/2026 | Gate 3 | Em andamento | Alcance e frequência exatos adicionados; limitação geográfica por cidade documentada; rastreador do fechamento criado | Commit `3baf3fa`; 111 testes backend; 4 testes frontend; lint, tipos e build; [Issue #2](https://github.com/Bonisengna/meta-ads-growth/issues/2) | Confirmar Auto Deploy e executar smoke test autenticado na VPS |
+| 10/09/2026 | Gate 3 | Concluído | Central operacional completa por nível, comparação, criativos, métricas e CSV publicada e validada | Commits `3baf3fa` e `b1db52a`; smoke autenticado; 113 testes backend; 7 testes frontend; revisões independentes sem P0–P2 | Definir o escopo do Gate 4 antes de implementar |
 
 ## Backlog posterior
 
