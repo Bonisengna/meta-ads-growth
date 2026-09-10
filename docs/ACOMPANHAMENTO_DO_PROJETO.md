@@ -1,6 +1,6 @@
 # DescompliADS — Acompanhamento oficial do projeto
 
-Atualizado em: **02/09/2026 às 12:42 (America/Sao_Paulo)**
+Atualizado em: **10/09/2026 (America/Sao_Paulo)**
 Branch de desenvolvimento: **`meta-ads-pro`**
 
 Este documento é a fonte de verdade do andamento do DescompliADS no GitHub.
@@ -133,13 +133,13 @@ constantemente o Gerenciador da Meta.
 
 ### Escopo aprovado para o planejamento
 
-- [ ] ritmo do orçamento mensal;
-- [ ] gasto realizado, saldo e projeção;
-- [ ] orçamento por campanha ou conjunto;
+- [x] ritmo do orçamento mensal;
+- [x] gasto realizado, saldo e projeção;
+- [x] orçamento por campanha ou conjunto;
 - [x] identificação de campanhas ativas sem entrega;
 - [x] pesquisa em campanha, conjunto e anúncio;
 - [ ] filtros, ordenação e escolha persistente de colunas;
-- [ ] navegação campanha → conjunto → anúncio;
+- [x] navegação campanha → conjunto → anúncio;
 - [ ] comparação lado a lado entre entidades do mesmo nível;
 - [ ] criativos com miniatura, texto, título, formato e CTA;
 - [ ] visualizações de vídeo em 3 segundos;
@@ -160,6 +160,33 @@ constantemente o Gerenciador da Meta.
 - comparação básica de duas campanhas;
 - coleta de criativos e métricas de vídeo e página;
 - preservação de entidades `ARCHIVED`.
+
+### Entregue no marco de 10/09/2026
+
+- [x] alcance e frequência consultados como totais exatos do período na Meta;
+- [x] fallback seguro quando a consulta exata estiver indisponível;
+- [x] frequência exibida no dashboard e na operação por campanha;
+- [x] geografia identificada como estado/região, sem atribuição indevida por cidade;
+- [x] limitação de campanhas com pontos personalizados explicada na interface;
+- [x] campanha real reconciliada com `4.718` impressões, alcance `2.806` e
+  frequência `1,681397`;
+- [x] `111` testes de backend, `4` testes de frontend, lint, tipos e build de
+  produção aprovados;
+- [x] commit e push `3baf3fa` realizados na branch `meta-ads-pro`.
+
+### Próxima etapa recomendada — fechamento operacional e aceite em produção
+
+Esta é uma continuação do **Gate 3**, não o início do Gate 4.
+
+1. confirmar o Auto Deploy do commit `3baf3fa` na VPS;
+2. executar smoke test autenticado e validar alcance, frequência e fallback;
+3. ampliar filtros, ordenação e colunas persistentes para campanha, conjunto e anúncio;
+4. permitir comparação entre entidades do mesmo nível;
+5. completar a inspeção de criativos e expor métricas de vídeo e página na visão operacional;
+6. implementar exportação CSV da visualização filtrada;
+7. concluir responsividade, acessibilidade, testes funcionais e evidências do gate.
+
+Rastreador de execução: [GitHub Issue #2](https://github.com/Bonisengna/meta-ads-growth/issues/2).
 
 ### Lacunas conhecidas
 
@@ -184,6 +211,7 @@ Ao terminar uma sessão relevante, acrescente uma entrada curta:
 | 02/09/2026 12:42 | Gate 2 | Concluído | Produção, ciclos, segurança e recuperação validados | 10 sucessos consecutivos; recuperação `54e51e98-f798-485c-935a-9cf9e0e7370d`; 107 testes; lint e build | Iniciar o Gate 3 |
 | 08/09/2026 12:32 | Gate 3 | Em andamento | Busca hierárquica e triagem de campanhas ativas sem entrega implementadas | 109 testes backend; 4 testes frontend; lint, tipos e build | Expor métricas operacionais e ampliar filtros por nível |
 | 09/09/2026 | Gate 3 | Aprovado para commit | Contraste corrigido, expansão automática acessível, testes do frontend integrados ao CI e artefatos locais excluídos do commit | Reverificação independente; contraste mínimo 4,75:1; 109 testes backend; 4 testes frontend; lint, tipos, build e `git diff --check` | Criar commit e executar smoke test controlado na VPS |
+| 10/09/2026 | Gate 3 | Em andamento | Alcance e frequência exatos adicionados; limitação geográfica por cidade documentada; rastreador do fechamento criado | Commit `3baf3fa`; 111 testes backend; 4 testes frontend; lint, tipos e build; [Issue #2](https://github.com/Bonisengna/meta-ads-growth/issues/2) | Confirmar Auto Deploy e executar smoke test autenticado na VPS |
 
 ## Backlog posterior
 
