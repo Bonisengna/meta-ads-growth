@@ -11,6 +11,7 @@ from app.services.entity_services import (
     EntityNotFoundError,
     MetricService,
     aggregate_metrics,
+    apply_exact_non_additive,
     build_data_confidence,
     build_insights,
     build_recommendations,
@@ -153,6 +154,21 @@ def test_single_metric_row_keeps_exact_reach_and_frequency() -> None:
 
     assert result["reach"] == 1000
     assert result["frequency"] == Decimal("1.25")
+
+
+def test_exact_period_metrics_restore_reach_and_frequency() -> None:
+    daily = aggregate_metrics([
+        {"impressions": 2000, "reach": 1400, "frequency": "1.4"},
+        {"impressions": 2718, "reach": 1600, "frequency": "1.6"},
+    ])
+
+    result = apply_exact_non_additive(daily, {
+        "impressions": "4718", "reach": "2806", "frequency": "1.681397",
+    })
+
+    assert result["impressions"] == 4718
+    assert result["reach"] == 2806
+    assert result["frequency"] == Decimal("1.681397")
 
 
 def test_data_confidence_explains_non_additive_metrics() -> None:

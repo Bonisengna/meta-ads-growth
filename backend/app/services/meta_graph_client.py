@@ -125,20 +125,24 @@ class MetaGraphClient:
         )
 
     def list_period_insights(
-        self, account_id: str, since: str, until: str
+        self, account_id: str, since: str, until: str, *, level: str = "account"
     ) -> list[dict[str, Any]]:
-        """Return account totals for reconciliation without summing unique reach."""
+        """Return exact period totals without summing non-additive daily metrics."""
+        if level not in {"account", "campaign"}:
+            raise ValueError("level deve ser account ou campaign")
+        entity_field = "" if level == "account" else f"{level}_id,"
         return list(
             self._paginate(
                 f"/{account_node(account_id)}/insights",
                 fields=(
-                    "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,"
+                    f"{entity_field}date_start,date_stop,spend,impressions,reach,clicks,"
+                    "inline_link_clicks,"
                     "ctr,cpc,cpm,frequency,actions,cost_per_action_type,"
                     "video_play_actions,video_p25_watched_actions,video_p50_watched_actions,"
                     "video_p75_watched_actions,video_p95_watched_actions,"
                     "video_thruplay_watched_actions"
                 ),
-                level="account",
+                level=level,
                 time_range={"since": since, "until": until},
                 use_account_attribution_setting="true",
                 action_report_time="impression",

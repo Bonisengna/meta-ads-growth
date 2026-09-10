@@ -104,6 +104,24 @@ def test_period_insights_use_account_level_without_daily_split() -> None:
     assert params["action_report_time"] == "impression"
 
 
+def test_period_insights_support_campaign_level_without_daily_split() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    with MetaGraphClient("token", transport=httpx.MockTransport(handler)) as client:
+        client.list_period_insights(
+            "123", "2026-08-01", "2026-08-30", level="campaign"
+        )
+
+    params = captured[0].url.params
+    assert params["level"] == "campaign"
+    assert "campaign_id" in params["fields"].split(",")
+    assert "time_increment" not in params
+
+
 def test_http_failure_becomes_safe_meta_error() -> None:
     transport = httpx.MockTransport(lambda _request: httpx.Response(401, json={"error": {}}))
 

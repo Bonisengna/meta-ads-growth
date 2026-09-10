@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import SupabaseClient
+from app.config.settings import get_settings
 from app.models.entities import (
     AdMetricRead,
     AdRead,
@@ -33,6 +34,7 @@ from app.services.entity_services import (
     MetricService,
     RecommendationService,
 )
+from app.services.meta_graph_client import MetaGraphClient
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -245,16 +247,28 @@ def get_dashboard(
     client_id: UUID | None = None,
     meta_account_id: UUID | None = None,
     campaign_id: UUID | None = None,
+    include_exact: bool = False,
 ) -> dict[str, object]:
     try:
-        return DashboardService(client).get_dashboard(
-            days=int(days),
-            date_from=date_from,
-            date_to=date_to,
-            client_id=client_id,
-            meta_account_id=meta_account_id,
-            campaign_id=campaign_id,
-        )
+        arguments = {
+            "days": int(days),
+            "date_from": date_from,
+            "date_to": date_to,
+            "client_id": client_id,
+            "meta_account_id": meta_account_id,
+            "campaign_id": campaign_id,
+        }
+        settings = get_settings()
+        if include_exact and settings.meta_configured:
+            assert settings.meta_access_token is not None
+            with MetaGraphClient(
+                settings.meta_access_token.get_secret_value(),
+                version=settings.meta_graph_version,
+                base_url=settings.meta_graph_base_url,
+                timeout=settings.meta_request_timeout_seconds,
+            ) as meta:
+                return DashboardService(client, meta).get_dashboard(**arguments)
+        return DashboardService(client).get_dashboard(**arguments)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

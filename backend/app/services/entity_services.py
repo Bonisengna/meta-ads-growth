@@ -6,6 +6,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.models.entities import EntityStatus
+from app.services.meta_graph_client import MetaGraphClient, MetaGraphError
 
 
 CLIENT_COLUMNS = "id,name,slug,status,created_at,updated_at"
@@ -232,8 +233,9 @@ class MetricService:
 class DashboardService:
     ENTITY_TABLES = ("clients", "meta_accounts", "campaigns", "adsets", "ads")
 
-    def __init__(self, client: Client) -> None:
+    def __init__(self, client: Client, meta: MetaGraphClient | None = None) -> None:
         self.client = client
+        self.meta = meta
 
     def get_dashboard(
         self,
@@ -249,10 +251,16 @@ class DashboardService:
         scope = self._scope(client_id, meta_account_id, campaign_id)
         current_metrics = self._aggregate(current[0], current[1], scope["campaign_ids"])
         previous_metrics = self._aggregate(previous[0], previous[1], scope["campaign_ids"])
+        exact_current, exact_previous, campaign_exact, exact_failed = (
+            self._exact_period_metrics(current, previous, scope, campaign_id)
+        )
+        current_metrics = apply_exact_non_additive(current_metrics, exact_current)
+        previous_metrics = apply_exact_non_additive(previous_metrics, exact_previous)
         analytics = self._analytics(
             current[0], current[1], scope
         )
         campaign_operations = self._operations(current[0], current[1], scope)
+        self._apply_campaign_exact_metrics(campaign_operations, scope, campaign_exact)
         investment_pacing = self._investment_pacing(scope)
         breakdowns = self._breakdown_analytics(
             current[0], current[1], scope["campaign_ids"]
@@ -286,9 +294,88 @@ class DashboardService:
             "recommendations": recommendations,
             "breakdowns": breakdowns,
             "data_confidence": build_data_confidence(
-                current[0], current[1], scope, analytics, current_metrics
+                current[0], current[1], scope, analytics, current_metrics,
+                exact_non_additive_requested=self.meta is not None,
+                exact_non_additive_failed=exact_failed,
             ),
         }
+
+    def _exact_period_metrics(
+        self,
+        current: tuple[date, date],
+        previous: tuple[date, date],
+        scope: dict[str, object],
+        campaign_id: UUID | None,
+    ) -> tuple[
+        dict[str, object] | None,
+        dict[str, object] | None,
+        dict[str, dict[str, object]],
+        bool,
+    ]:
+        account_rows = scope["account_rows"]
+        if self.meta is None or len(account_rows) != 1:
+            return None, None, {}, False
+        account_id = account_rows[0].get("meta_account_id")
+        if not account_id:
+            return None, None, {}, False
+
+        campaign_rows = scope["campaign_rows"]
+        selected_campaign = next(
+            (row for row in campaign_rows if str(row.get("id")) == str(campaign_id)),
+            None,
+        )
+        try:
+            current_campaign_rows = self.meta.list_period_insights(
+                str(account_id), current[0].isoformat(), current[1].isoformat(),
+                level="campaign",
+            )
+            campaign_exact = {
+                str(row["campaign_id"]): row
+                for row in current_campaign_rows
+                if row.get("campaign_id")
+            }
+            if selected_campaign:
+                meta_campaign_id = str(selected_campaign.get("meta_campaign_id") or "")
+                exact_current = campaign_exact.get(meta_campaign_id)
+                previous_rows = self.meta.list_period_insights(
+                    str(account_id), previous[0].isoformat(), previous[1].isoformat(),
+                    level="campaign",
+                )
+                exact_previous = next(
+                    (
+                        row for row in previous_rows
+                        if str(row.get("campaign_id")) == meta_campaign_id
+                    ),
+                    None,
+                )
+            else:
+                current_rows = self.meta.list_period_insights(
+                    str(account_id), current[0].isoformat(), current[1].isoformat()
+                )
+                previous_rows = self.meta.list_period_insights(
+                    str(account_id), previous[0].isoformat(), previous[1].isoformat()
+                )
+                exact_current = current_rows[0] if current_rows else None
+                exact_previous = previous_rows[0] if previous_rows else None
+            return exact_current, exact_previous, campaign_exact, False
+        except MetaGraphError:
+            return None, None, {}, True
+
+    @staticmethod
+    def _apply_campaign_exact_metrics(
+        operations: list[dict[str, object]],
+        scope: dict[str, object],
+        exact_by_meta_id: dict[str, dict[str, object]],
+    ) -> None:
+        meta_ids = {
+            str(row["id"]): str(row.get("meta_campaign_id") or "")
+            for row in scope["campaign_rows"]
+        }
+        for operation in operations:
+            exact = exact_by_meta_id.get(meta_ids.get(str(operation["id"]), ""))
+            operation["metrics"] = apply_exact_non_additive(
+                operation["metrics"], exact
+            )
 
     def _investment_pacing(self, scope: dict[str, object]) -> dict[str, object]:
         today = date.today()
@@ -519,7 +606,7 @@ class DashboardService:
         client_ids = row_ids(client_rows)
 
         account_query = self.client.table("meta_accounts").select(
-            "id,client_id,currency,timezone,last_synced_at,last_entities_synced_at,"
+            "id,client_id,meta_account_id,currency,timezone,last_synced_at,last_entities_synced_at,"
             "last_metrics_synced_at,last_successful_sync_at"
         )
         if client_id:
@@ -530,7 +617,7 @@ class DashboardService:
         account_ids = row_ids(account_rows)
 
         campaign_query = self.client.table("campaigns").select(
-            "id,meta_account_id,name,objective,status,daily_budget,lifetime_budget,"
+            "id,meta_account_id,meta_campaign_id,name,objective,status,daily_budget,lifetime_budget,"
             "budget_remaining,start_time,stop_time"
         )
         campaign_rows: list[dict[str, object]] = []
@@ -870,6 +957,26 @@ def aggregate_metrics(rows: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def apply_exact_non_additive(
+    metrics: dict[str, object], exact: dict[str, object] | None
+) -> dict[str, object]:
+    result = dict(metrics)
+    if not exact:
+        return result
+    raw_reach = exact.get("reach")
+    if raw_reach not in (None, ""):
+        result["reach"] = int(raw_reach)
+    raw_frequency = exact.get("frequency")
+    if raw_frequency not in (None, ""):
+        result["frequency"] = Decimal(str(raw_frequency))
+    elif result.get("reach"):
+        result["frequency"] = safe_divide(
+            Decimal(int(exact.get("impressions") or result["impressions"])),
+            Decimal(int(result["reach"])),
+        )
+    return result
+
+
 def metrics_have_delivery(metrics: dict[str, object]) -> bool:
     """Treat spend or impressions as evidence that Meta delivered the campaign."""
     return (
@@ -895,6 +1002,9 @@ def build_data_confidence(
     scope: dict[str, object],
     analytics: dict[str, object],
     metrics: dict[str, object],
+    *,
+    exact_non_additive_requested: bool = False,
+    exact_non_additive_failed: bool = False,
 ) -> dict[str, object]:
     account_rows = scope["account_rows"]
     currencies = {str(row["currency"]) for row in account_rows if row.get("currency")}
@@ -916,11 +1026,20 @@ def build_data_confidence(
             "title": "O dia atual ainda está em andamento",
             "message": "A Meta pode ajustar os números de hoje após novas entregas e atribuições.",
         })
-    if row_count > 1:
+    exact_non_additive_available = (
+        metrics.get("reach") is not None and metrics.get("frequency") is not None
+    )
+    if row_count > 1 and not exact_non_additive_available:
         issues.append({
             "code": "NON_ADDITIVE_METRICS_UNAVAILABLE", "severity": "INFO",
             "title": "Alcance e frequência não foram somados",
             "message": "Essas métricas contam pessoas e não podem ser somadas entre dias ou campanhas sem duplicação.",
+        })
+    if exact_non_additive_requested and exact_non_additive_failed:
+        issues.append({
+            "code": "EXACT_PERIOD_METRICS_UNAVAILABLE", "severity": "INFO",
+            "title": "Total exato do período indisponível",
+            "message": "A consulta de alcance e frequência à Meta falhou; as demais métricas continuam disponíveis.",
         })
     if len(currencies) > 1:
         issues.append({
@@ -954,12 +1073,12 @@ def build_data_confidence(
         })
 
     available = "AVAILABLE" if row_count else "UNAVAILABLE"
-    non_additive = "AVAILABLE" if row_count == 1 else "UNAVAILABLE"
+    non_additive = "AVAILABLE" if exact_non_additive_available else "UNAVAILABLE"
     catalog = [
         {"key": "spend", "label": "Investimento", "source": "Meta Ads Insights", "formula": "Valor gasto no período", "aggregation": "Soma", "quality": available},
         {"key": "impressions", "label": "Impressões", "source": "Meta Ads Insights", "formula": "Exibições no período", "aggregation": "Soma", "quality": available},
-        {"key": "reach", "label": "Alcance", "source": "Meta Ads Insights", "formula": "Pessoas únicas alcançadas", "aggregation": "Não aditiva", "quality": non_additive, "note": "Disponível somente quando o resultado vem de uma única linha exata."},
-        {"key": "frequency", "label": "Frequência", "source": "Meta Ads Insights", "formula": "Impressões ÷ alcance", "aggregation": "Não aditiva", "quality": non_additive},
+        {"key": "reach", "label": "Alcance", "source": "Meta Ads Insights", "formula": "Pessoas únicas alcançadas", "aggregation": "Total exato do período", "quality": non_additive, "note": "Consultado diretamente na Meta porque alcance não pode ser somado entre dias."},
+        {"key": "frequency", "label": "Frequência", "source": "Meta Ads Insights", "formula": "Impressões ÷ alcance", "aggregation": "Total exato do período", "quality": non_additive},
         {"key": "ctr", "label": "CTR", "source": "Calculada", "formula": "Cliques ÷ impressões × 100", "aggregation": "Recalculada pelos totais", "quality": available},
         {"key": "cpc", "label": "CPC", "source": "Calculada", "formula": "Investimento ÷ cliques", "aggregation": "Recalculada pelos totais", "quality": available},
         {"key": "cpm", "label": "CPM", "source": "Calculada", "formula": "Investimento ÷ impressões × 1.000", "aggregation": "Recalculada pelos totais", "quality": available},
