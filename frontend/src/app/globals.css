@@ -146,7 +146,7 @@ th,td{font-size:var(--text-sm);line-height:1.45}th{font-size:var(--text-xs)}.sta
 html,body{background:var(--paper);color:var(--ink)}
 body{font-size:15px;line-height:1.5}.eyebrow,.coral{color:var(--meta-blue)}.eyebrow{font-size:10px;letter-spacing:.12em}
 button,input,select,textarea{font-family:var(--font-body)}button{transition:background-color .18s,border-color .18s,color .18s,box-shadow .18s,transform .18s}
-button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #0866ff40;outline-offset:2px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #0866ff;outline-offset:2px}
 .brand-mark{border-radius:14px;background:linear-gradient(135deg,var(--meta-blue),var(--meta-purple));box-shadow:0 10px 25px #0866ff26}.brand-mark.small{border-radius:11px}
 .app-shell{background:var(--paper)}.app-sidebar,aside{z-index:45;color:#344054;background:#fff;border-right:1px solid var(--line);box-shadow:6px 0 28px #10182808}.logo{border-color:var(--line)}.logo strong{color:#172033}.logo small{color:#8a94a6}
 nav a,nav button{color:#667085}nav a:hover,nav button:hover{color:#0866ff;background:#f3f7ff}nav a.active,nav button.active{color:#fff;background:linear-gradient(135deg,#0866ff,#5b52eb);box-shadow:0 10px 22px #0866ff2b}.nav-icon{color:inherit}
@@ -197,3 +197,17 @@ th,td{border-color:#edf0f4;color:#344054}th{color:#667085;background:#f8fafc}.st
 .creative-summary p{color:#667085}
 .expand-button:disabled{cursor:not-allowed;opacity:.58}
 .chart-note{margin:18px 0 0;padding-top:12px;border-top:1px solid #e7ebf2;color:#667085;font-size:10px;line-height:1.5}
+
+/* Gate 3 — operação completa por nível, exportação e acessibilidade. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.operation-toolbar{grid-template-columns:minmax(190px,1.4fr) repeat(3,minmax(135px,.72fr)) repeat(4,auto)}.operation-toolbar>label{color:#475467;font-size:12px}
+.export-button{min-height:44px;padding:10px 13px;border:1px solid #0866ff;border-radius:9px;color:#fff;background:#0866ff;font-size:11px;font-weight:800;cursor:pointer}
+.export-button:hover{background:#0759df}.export-button:disabled{cursor:not-allowed;opacity:.5}
+.empty-cell button{margin-left:8px;border:0;color:#075cd8;background:transparent;font-weight:750;text-decoration:underline;cursor:pointer}
+.column-picker>div{max-height:min(520px,70vh);overflow-y:auto}
+.operation-table input[type="checkbox"],.column-picker input[type="checkbox"]{width:24px;height:24px;accent-color:#0866ff}.operation-table input[type="checkbox"]:disabled{cursor:not-allowed;opacity:.5}
+.flat-row td:first-child{padding-left:18px}.flat-entity{display:grid;gap:3px}.flat-entity small{max-width:430px;overflow:hidden;color:#667085;text-overflow:ellipsis;white-space:nowrap}
+.creative-summary strong,.creative-summary b,.creative-summary p{white-space:normal}.creative-summary b,.creative-summary p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}.creative-hierarchy{color:#475467!important}.creative-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.creative-meta a{color:#075cd8;font-size:11px;font-weight:750;text-decoration:underline}.creative-meta a:hover,.creative-meta a:focus-visible{text-decoration-thickness:2px}
+.campaign-comparison{flex-wrap:wrap;border-color:#cbd8ee;background:#eef4ff;color:#172033}.campaign-comparison>div span,.campaign-comparison article span{color:#475467;font-size:11px}.campaign-comparison article{max-width:280px;background:#fff}.campaign-comparison>button{min-height:44px;color:#075cd8;text-decoration:underline}
+@media(max-width:1280px){.operation-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.operation-toolbar>*{min-width:0}}
+@media(max-width:760px){.operation-toolbar{grid-template-columns:1fr}.operation-toolbar button,.operation-toolbar summary{width:100%}.campaign-comparison{display:grid;grid-template-columns:1fr}.campaign-comparison>div,.campaign-comparison article{min-width:0;max-width:none}.campaign-comparison>button{margin-left:0}.operation-table{min-width:980px}.operation-table-wrap{max-height:70vh}.operation-table th:first-child,.operation-table td:first-child{position:sticky;z-index:3;left:0;max-width:270px;background:inherit;box-shadow:5px 0 10px #1018280d}.operation-table thead th:first-child{z-index:7;background:#f8fafc}.flat-entity small{max-width:230px}}

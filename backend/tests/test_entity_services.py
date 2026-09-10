@@ -8,6 +8,7 @@ import pytest
 from app.services.entity_services import (
     CampaignService,
     ClientService,
+    DashboardService,
     EntityNotFoundError,
     MetricService,
     aggregate_metrics,
@@ -21,6 +22,7 @@ from app.services.entity_services import (
     metrics_have_delivery,
     resolve_periods,
 )
+from app.services.meta_graph_client import MetaGraphError
 
 CLIENT_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -169,6 +171,82 @@ def test_exact_period_metrics_restore_reach_and_frequency() -> None:
     assert result["impressions"] == 4718
     assert result["reach"] == 2806
     assert result["frequency"] == Decimal("1.681397")
+
+
+def test_exact_period_metrics_fall_back_when_meta_is_unavailable() -> None:
+    class FailingMeta:
+        def list_period_insights(self, *_args, **_kwargs):
+            raise MetaGraphError("Meta temporariamente indisponível")
+
+    service = DashboardService(SimpleNamespace(), FailingMeta())
+    current, previous, campaigns, failed = service._exact_period_metrics(
+        (date(2025, 11, 1), date(2025, 11, 30)),
+        (date(2025, 10, 2), date(2025, 10, 31)),
+        {
+            "account_rows": [{"meta_account_id": "act_742175035567342"}],
+            "campaign_rows": [{"id": "campaign-1", "meta_campaign_id": "120235301371730438"}],
+        },
+        None,
+    )
+
+    assert current is None
+    assert previous is None
+    assert campaigns == {}
+    assert failed is True
+
+
+def test_dashboard_preserves_additive_metrics_and_warns_on_exact_meta_failure() -> None:
+    class FailingMeta:
+        def list_period_insights(self, *_args, **_kwargs):
+            raise MetaGraphError("Meta temporariamente indisponível")
+
+    service = DashboardService(SimpleNamespace(), FailingMeta())
+    stored_metrics = aggregate_metrics([{
+        "spend": "468.73", "impressions": 104429, "reach": None,
+        "clicks": 3500, "link_clicks": 2930, "leads": 9,
+        "conversations": 20,
+    }])
+    stored_metrics["reach"] = None
+    stored_metrics["frequency"] = None
+    aggregate_results = iter([stored_metrics, aggregate_metrics([])])
+    service._scope = lambda *_args: {  # type: ignore[method-assign]
+        "clients": 1,
+        "account_ids": ["account-1"],
+        "campaign_ids": ["campaign-1"],
+        "adset_ids": [],
+        "ads": 0,
+        "account_rows": [{
+            "meta_account_id": "act_742175035567342", "currency": "BRL",
+            "timezone": "America/Sao_Paulo",
+        }],
+        "campaign_rows": [{
+            "id": "campaign-1", "meta_campaign_id": "120235301371730438",
+        }],
+    }
+    service._aggregate = lambda *_args: next(aggregate_results)  # type: ignore[method-assign]
+    service._analytics = lambda *_args: {  # type: ignore[method-assign]
+        "daily_series": [], "campaign_ranking": [], "adset_ranking": [],
+        "ad_ranking": [], "metric_row_count": 1,
+        "latest_metric_date": "2025-11-30",
+    }
+    service._operations = lambda *_args: []  # type: ignore[method-assign]
+    service._investment_pacing = lambda *_args: {}  # type: ignore[method-assign]
+    service._breakdown_analytics = lambda *_args: {}  # type: ignore[method-assign]
+    service._decision_statuses = lambda *_args: {}  # type: ignore[method-assign]
+
+    result = service.get_dashboard(
+        date_from=date(2025, 11, 1), date_to=date(2025, 11, 30),
+    )
+
+    assert result["metrics"]["spend"] == Decimal("468.73")
+    assert result["metrics"]["impressions"] == 104429
+    assert result["metrics"]["link_clicks"] == 2930
+    assert result["metrics"]["reach"] is None
+    assert result["metrics"]["frequency"] is None
+    assert any(
+        issue["code"] == "EXACT_PERIOD_METRICS_UNAVAILABLE"
+        for issue in result["data_confidence"]["issues"]
+    )
 
 
 def test_data_confidence_explains_non_additive_metrics() -> None:
